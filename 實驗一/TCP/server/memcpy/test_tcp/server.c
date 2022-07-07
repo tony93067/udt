@@ -52,8 +52,8 @@ void *send_packet(void *arg)
       }
       send_packet++;
       
-      // sleep 0.25s(use to control sending rate)
-      usleep(25000);
+      // sleep 0.025s(use to control sending rate)
+      //usleep(25000);
    }
    /*************/
    printf("Client %d: Total Send Packet: %d\n",no_client,send_packet);

@@ -143,14 +143,14 @@ int main(int argc, char* argv[])
       cout << "incorrect server/peer address. " << argv[1] << ":" << argv[2] << endl;
       return 0;
    }*/
-  cout << "enter" <<endl;
-  fflush(stdout);
+
    // connect to the server, implict bind
    if (UDT::ERROR == UDT::connect(client_control, local->ai_addr, local->ai_addrlen))
    {
       cout << "connect: " << UDT::getlasterror().getErrorMessage() << endl;
       return 0;
    }
+
    //freeaddrinfo(peer);
    freeaddrinfo(local);
 
@@ -243,8 +243,8 @@ int main(int argc, char* argv[])
    }
   
    // exchange data packet
-  client_data = UDT::socket(local->ai_family, local->ai_socktype, local->ai_protocol);
-     
+   client_data = UDT::socket(local->ai_family, local->ai_socktype, local->ai_protocol);
+	
    // UDT Options
    //UDT::setsockopt(client_data, 0, UDT_RCVTIMEO, &recv_timeo, sizeof(int));
    //UDT::setsockopt(client_data, 0, UDT_CC, new CCCFactory<CUDPBlast>, sizeof(CCCFactory<CUDPBlast>));
@@ -272,8 +272,8 @@ int main(int argc, char* argv[])
    //freeaddrinfo(peer);
 	freeaddrinfo(local);
    cout << "connect to Server: " << argv[1] << ", port: " << port_data_socket.c_str() << endl;
-  int rsize = 0;
-  
+
+   int rsize = 0;  
    // create thread to enable timer
    /*
    pthread_t timerthread;
@@ -573,12 +573,11 @@ DWORD WINAPI monitor(LPVOID s)
       // interval mode
       if(mode == 2)
       {
-         /*execute_time = (new_time - old_time)/ticks;
-         cout << "execute_time " << execute_time <<endl;
+         execute_time = (new_time - old_time)/ticks;
          final_execute_time = execute_time - tmp_execute_time;
          tmp_execute_time = execute_time;
          printf("Interval Execute Time (sec): %2.2f\n", final_execute_time);
-        */
+
          final_total_recv_packets = total_recv_packets;
          final_total_recv_size = total_recv_size;
          final_total_recv_packets -= tmp_total_recv_packets;

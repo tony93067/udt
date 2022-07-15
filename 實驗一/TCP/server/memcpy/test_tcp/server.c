@@ -66,6 +66,7 @@ void *send_packet(void *arg)
       }
       //printf("send size %d\n", send_size);
       send_packet++;
+<<<<<<< HEAD
       total_sendsize += send_size;
       // sleep 0.025s(use to control sending rate)
      usleep(1000);
@@ -74,6 +75,11 @@ void *send_packet(void *arg)
    {
        printf("time error\n");
        exit(1);
+=======
+      
+      // sleep 0.025s(use to control sending rate)
+     usleep(1000);
+>>>>>>> 827f7dfa0690ed4c487fdc0e3a4f266a51524766
    }
    ticks=sysconf(_SC_CLK_TCK);
    double execute_time = (new_time - old_time)/ticks;

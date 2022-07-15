@@ -30,7 +30,7 @@ using namespace std;
 #define UNITS_BYTE_TO_BITS 8
 
 // define packet size(bytes)
-#define PACKET_SIZE 1500
+#define PACKET_SIZE 100
 #define NUM_PACKET_LENGTH 1000
 
 // define DEFAULT_PORT
@@ -39,6 +39,7 @@ using namespace std;
 
 /* global variables */
 struct buffer {
+    int seq;
     char data[PACKET_SIZE];
 };
 // compute execution time
@@ -54,7 +55,7 @@ int tmp_total_recv_size = 0;
 int final_total_recv_size = 0;
 int num_packets = 0;
 int seq_client = 0;
-int totalbytes = 0;
+int ttl_ms = 0;
 double execute_time;
 double tmp_execute_time = 0;
 double final_execute_time = 0.0f; 
@@ -143,14 +144,14 @@ int main(int argc, char* argv[])
       cout << "incorrect server/peer address. " << argv[1] << ":" << argv[2] << endl;
       return 0;
    }*/
-  cout << "enter" <<endl;
-  fflush(stdout);
+
    // connect to the server, implict bind
    if (UDT::ERROR == UDT::connect(client_control, local->ai_addr, local->ai_addrlen))
    {
       cout << "connect: " << UDT::getlasterror().getErrorMessage() << endl;
       return 0;
    }
+
    //freeaddrinfo(peer);
    freeaddrinfo(local);
 
@@ -197,8 +198,8 @@ int main(int argc, char* argv[])
    }
 
    // receive ttl_ms_recv
-   char total_byte[NUM_PACKET_LENGTH];
-   if (UDT::ERROR == (rs = UDT::recv(client_control, total_byte, sizeof(total_byte), 0)))
+   char ttl_ms_recv[NUM_PACKET_LENGTH];
+   if (UDT::ERROR == (rs = UDT::recv(client_control, ttl_ms_recv, sizeof(ttl_ms_recv), 0)))
    {
      cout << "recv:" << UDT::getlasterror().getErrorMessage() << endl;
      exit(1);
@@ -206,9 +207,9 @@ int main(int argc, char* argv[])
   
    if(rs > 0)
    {
-     totalbytes = atoi(total_byte);
-     //cout << "rs(ttl_ms_recv): " << rs << endl;
-     cout << "totalbyte: " << totalbytes << endl;
+     ttl_ms = atoi(ttl_ms_recv);
+     cout << "rs(ttl_ms_recv): " << rs << endl;
+     cout << "ttl_ms: " << ttl_ms << endl;
    }
 
    
@@ -243,8 +244,8 @@ int main(int argc, char* argv[])
    }
   
    // exchange data packet
-  client_data = UDT::socket(local->ai_family, local->ai_socktype, local->ai_protocol);
-     
+   client_data = UDT::socket(local->ai_family, local->ai_socktype, local->ai_protocol);
+	
    // UDT Options
    //UDT::setsockopt(client_data, 0, UDT_RCVTIMEO, &recv_timeo, sizeof(int));
    //UDT::setsockopt(client_data, 0, UDT_CC, new CCCFactory<CUDPBlast>, sizeof(CCCFactory<CUDPBlast>));
@@ -272,15 +273,15 @@ int main(int argc, char* argv[])
    //freeaddrinfo(peer);
 	freeaddrinfo(local);
    cout << "connect to Server: " << argv[1] << ", port: " << port_data_socket.c_str() << endl;
-  int rsize = 0;
+
+   int rsize = 0;
+   int i = 0;
   
    // create thread to enable timer
-   /*
    pthread_t timerthread;
    int limit_time = 10;
    pthread_create(&timerthread, NULL, start_timer, &limit_time);
-   */
-   /*for(i = 0; i < num_packets; i++)
+   for(i = 0; i < num_packets; i++)
    {
 
      // reset recv_buf.data
@@ -288,7 +289,7 @@ int main(int argc, char* argv[])
 
      if(UDT::ERROR == (rsize = UDT::recv(client_data, (char *)&recv_buf, sizeof(recv_buf), 0))) 
      {
-       cout << "recv:" << UDT::getlasterror().getErrorMessage() << endl;
+       cout << "recvmsg:" << UDT::getlasterror().getErrorMessage() << endl;
        exit(1);
      }
      else
@@ -321,7 +322,7 @@ int main(int argc, char* argv[])
        current_seq = recv_buf.seq;
     
        total_recv_packets++;
-       total_recv_size += rsize ;
+       total_recv_size += (rsize - sizeof(recv_buf.seq));
      }
 
      //finish time
@@ -337,69 +338,15 @@ int main(int argc, char* argv[])
    {
      close_connection();
    }
-   return 1;*/
-   int j = 0; // used to set start time
-   while(1)
-   {
-
-     // reset recv_buf.data
-     memset(recv_buf.data, 0,sizeof(recv_buf.data));
-
-     if(UDT::ERROR == (rsize = UDT::recv(client_data, (char *)&recv_buf.data, sizeof(recv_buf.data), 0))) 
-     {
-       cout << "recv:" << UDT::getlasterror().getErrorMessage() << endl;
-       exit(1);
-     }
-     else
-     {
-      //reset_timer();
-        
-      // record start time when receive first data packet
-      if(j == 0)
-      {
-          // create thread to monitor socket(client_data)
-        pthread_create(new pthread_t, NULL, monitor, &client_data);
-        //start time
-        cout << "enter" << endl;
-        if((old_time = times(&time_start)) == -1)
-        {
-          printf("time error\n");
-          exit(1);
-        }
-         
-      }
-      total_recv_packets++;
-      /*if (total_recv_packets % 100 == 0)
-      {
-        cout << "total_recv_packets " << total_recv_packets << endl;
-      }*/
-      total_recv_size += rsize ;
-     // cout << "total_recv_size " << total_recv_size <<endl;
-    }
-    //cout << "rsize " << rsize << endl;
-    if(total_recv_size == totalbytes)
-      break;
-    j++;
-
-  }
-   
-  //finish time
-  if((new_time = times(&time_end)) == -1)
-  {
-    printf("time error\n");
-    exit(1);
-  }
-  close_connection();
-  return 1;
+   return 1;
 }
 void close_connection()
 {
-    ticks=sysconf(_SC_CLK_TCK);
    printf("\n[Close Connection]\n");
    printf("Client Seq: %d\n", seq_client);
-   //printf("TTL(ms): %d\n", ttl_ms); 
-   //printf("Num of Out-of-Order Packet(Cumulative): %d\n", num_out_of_order);
-   execute_time = (double)(new_time - old_time)/ticks; 
+   printf("TTL(ms): %d\n", ttl_ms); 
+   printf("Num of Out-of-Order Packet(Cumulative): %d\n", num_out_of_order);
+   execute_time = (new_time - old_time)/ticks; 
    if(execute_time != 0) 
    {
       throughput_bits = (total_recv_packets * PACKET_SIZE * UNITS_BYTE_TO_BITS)/execute_time;
@@ -563,22 +510,21 @@ DWORD WINAPI monitor(LPVOID s)
 
       printf("\n\n[Result]:\n");
       printf("Client Seq: %d\n", seq_client);
-      //printf("TTL(ms): %d\n", ttl_ms);
-      //interval++;
-      //printf("Interval: %d\n", interval);
+      printf("TTL(ms): %d\n", ttl_ms);
+      interval++;
+      printf("Interval: %d\n", interval);
       //executing time
       ticks=sysconf(_SC_CLK_TCK);
       printf("Packet Size (Bytes): %d\n", PACKET_SIZE);
-      //printf("Num of Out-of-Order Packet: %d\n", num_out_of_order);
+      printf("Num of Out-of-Order Packet: %d\n", num_out_of_order);
       // interval mode
       if(mode == 2)
       {
-         /*execute_time = (new_time - old_time)/ticks;
-         cout << "execute_time " << execute_time <<endl;
+         execute_time = (new_time - old_time)/ticks;
          final_execute_time = execute_time - tmp_execute_time;
          tmp_execute_time = execute_time;
          printf("Interval Execute Time (sec): %2.2f\n", final_execute_time);
-        */
+
          final_total_recv_packets = total_recv_packets;
          final_total_recv_size = total_recv_size;
          final_total_recv_packets -= tmp_total_recv_packets;

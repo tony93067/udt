@@ -25,8 +25,6 @@ void* handle_client(void*);
 #define START_TRANS "start"
 #define END_TRANS "end"
 
-// define number of packets
-#define DEFAULT_NUM_PACKETS 40
 // define UNITS
 #define UNITS_G 1000000000
 #define UNITS_M 1000000
@@ -34,7 +32,6 @@ void* handle_client(void*);
 #define UNITS_BYTE_TO_BITS 8
 
 // define packet size
-#define PACKET_SIZE 100
 #define NUM_PACKET_LENGTH 1000
 
 // define DEFAULT_PORT
@@ -47,9 +44,10 @@ void* handle_client(void*);
 // define DEFAULT_EXECUTE_TIME
 #define DEFAULT_EXECUTE_TIME 1
 
+// define SERVER_IP
+#define SERVER_IP "140.117.171.182"
 /* gloabal variables */;
 struct buffer {
-  int seq;
   char data[PACKET_SIZE];
 };
 int output_interval = 5000000; // 5sec
@@ -74,9 +72,14 @@ int num_client = 0;
 
 int main(int argc, char* argv[])
 {
-   if ((1 != argc) && (((2 != argc) && (3 != argc) && (4 != argc) && (5 != argc) && (6 != argc)) || (0 == atoi(argv[1]))))
+   /*if ((1 != argc) && (((2 != argc) && (3 != argc) && (4 != argc) && (5 != argc) && (6 != argc)) || (0 == atoi(argv[1]))))
    {
       cout << "usage: ./udtserver [server_port] [execute_time(sec)] [num_client] [output_interval(sec)] [ttl(msec)]" << endl;
+      return 0;
+   }*/
+   if ((1 != argc) && (((2 != argc) && (3 != argc) && (4 != argc) && (5 != argc)) || (0 == atoi(argv[1]))))
+   {
+      cout << "usage: ./udtserver [server_port] [packet_size] [num_client] [output_interval(sec)]" << endl;
       return 0;
    }
 
@@ -94,9 +97,6 @@ int main(int argc, char* argv[])
    //hints.ai_socktype = SOCK_DGRAM;
     
    string service_control(CONTROL_DEFAULT_PORT);
-
-   // default => 40pkt/s
-   num_packets = DEFAULT_NUM_PACKETS;
   
    if(6 == argc)
    {
@@ -118,14 +118,14 @@ int main(int argc, char* argv[])
      }
 
      // decide num_packets
-     execute_time_sec = atoi(argv[2]);
+     //execute_time_sec = atoi(argv[2]);
      // E.g. 10min => 10 * 60 = 600s => 600 * 40(pkt/s) = 24000(pkt) / 10min
-     num_packets *= execute_time_sec;
+     //num_packets *= execute_time_sec;
 
      // decide service_port
      service_control = argv[1];
 
-     cout << "port: " << argv[1] << ", num_packets: " << num_packets << endl;
+     cout << "port: " << argv[1] << ", packet size: " << argv[2] << endl;
    }
    else if(5 == argc)
    { 
@@ -145,9 +145,9 @@ int main(int argc, char* argv[])
      }
 
      // decide num_packets
-     execute_time_sec = atoi(argv[2]);
+     //execute_time_sec = atoi(argv[2]);
      // E.g. 10min => 10 * 60 = 600s => 600 * 40(pkt/s) = 24000(pkt) / 10min
-     num_packets *= execute_time_sec;
+     num_packets = atoi(argv[2]);
 
      // decide service_port
      service_control = argv[1];
@@ -198,7 +198,7 @@ int main(int argc, char* argv[])
       cout << "num_packets: " << num_packets << endl;
    }
 
-   if (0 != getaddrinfo(NULL, service_control.c_str(), &hints, &res))
+   if (0 != getaddrinfo(SERVER_IP, service_control.c_str(), &hints, &res))
    {
       cout << "illegal port number or port is busy.\n" << endl;
       return 0;
@@ -269,8 +269,8 @@ void *handle_client(void *arg)
   // packets
   int total_send_packets = 0;
   int total_send_size = 0;
-  int sec = 0;
-  int interval = 0;
+  //int sec = 0;
+  //int interval = 0;
   
   total_number_clients++;
   
@@ -294,7 +294,7 @@ void *handle_client(void *arg)
 
   // send NUM_PACKETS to client
   int ss = 0;
-  char total_num_packets[NUM_PACKET_LENGTH];
+  /*char total_num_packets[NUM_PACKET_LENGTH];
 
   // convert int into string
   sprintf(total_num_packets,"%d",num_packets); 
@@ -303,7 +303,7 @@ void *handle_client(void *arg)
   {
     cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
     exit(1); 
-  }
+  }*/
 
   // send seq number to client
   char seq_client_char[NUM_PACKET_LENGTH];
@@ -318,18 +318,17 @@ void *handle_client(void *arg)
   }
   seq_client++;
 
-  // send ttl to client
-  char ttl_ms_char[NUM_PACKET_LENGTH];
+  /*char total_bytes[NUM_PACKET_LENGTH];
 
   // convert int into string
-  sprintf(ttl_ms_char,"%d",ttl_ms); 
-  cout << "TTL(ms): " << ttl_ms_char << endl;
-  if(UDT::ERROR == (ss = UDT::send(recver, ttl_ms_char, sizeof(ttl_ms_char), 0)))
+  sprintf(total_bytes,"%d",num_packets*1500); 
+  cout << "totalbytes: " << total_bytes << endl;
+  if(UDT::ERROR == (ss = UDT::send(recver, total_bytes, sizeof(total_bytes), 0)))
   {
     cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
     exit(1); 
   }
-
+  */
   // send port of data socket to client 
   port_seq %= num_client;
   cout << "elements in port_data_socket: " << sizeof(port_data_socket) << endl;
@@ -360,12 +359,11 @@ void *handle_client(void *arg)
   hints.ai_family = AF_INET;
   hints.ai_socktype = SOCK_STREAM;
  
-  if (0 != getaddrinfo(NULL, service_data.c_str(), &hints, &res))
+  if (0 != getaddrinfo(SERVER_IP, service_data.c_str(), &hints, &res))
   {
     cout << "illegal port number or port is busy.\n" << endl;
     exit(1);
   }
-
   // exchange data packet
   UDTSOCKET serv_data = UDT::socket(res->ai_family, res->ai_socktype, res->ai_protocol);
    // UDT Options
@@ -374,7 +372,40 @@ void *handle_client(void *arg)
    //UDT::setsockopt(serv, 0, UDT_RCVBUF, new int(10000000), sizeof(int));
    //UDT::setsockopt(serv, 0, UDP_RCVBUF, new int(10000000), sizeof(int));
    //UDT::setsockopt(serv_data, 0, UDT_REUSEADDR, new bool(false), sizeof(bool));
-
+  
+  int sndbuf = 0;
+  int oplen = sizeof(int);
+  if (UDT::ERROR == UDT::getsockopt(serv_data, 0, UDT_SNDBUF, (char*)&sndbuf, &oplen))
+  {
+    cout << "getsockopt error" << endl;
+  }else
+  {
+    cout << "UDT Send Buffer size : " << sndbuf << endl;
+  }
+  sndbuf = 0;
+  if (UDT::ERROR == UDT::getsockopt(serv_data, 0, UDT_RCVBUF, (char*)&sndbuf, &oplen))
+  {
+    cout << "getsockopt error" << endl;
+  }else
+  {
+    cout << "UDT RECV Buffer size : " << sndbuf << endl;
+  }
+  sndbuf = 0;
+  if (UDT::ERROR == UDT::getsockopt(serv_data, 0, UDP_SNDBUF, (char*)&sndbuf, &oplen))
+  {
+    cout << "getsockopt error" << endl;
+  }else
+  {
+    cout << "UDP Send Buffer size : " << sndbuf << endl;
+  }
+  sndbuf = 0;
+  if (UDT::ERROR == UDT::getsockopt(serv_data, 0, UDP_RCVBUF, (char*)&sndbuf, &oplen))
+  {
+    cout << "getsockopt error" << endl;
+  }else
+  {
+    cout << "UDP RECV Buffer size : " << sndbuf << endl;
+  }
   if (UDT::ERROR == UDT::bind(serv_data, res->ai_addr, res->ai_addrlen))
   {
     cout << "bind(serv_data): " << UDT::getlasterror().getErrorMessage() << endl;
@@ -402,9 +433,11 @@ void *handle_client(void *arg)
 	
   int i = 0;
   int ssize = 0;
-  int seq = 1;
-  for(i = 0; i < num_packets; i++) {
-   
+  int packet_size = atoi(argv[2]); // get packet_size
+  // clear temporary buffer
+  memset(send_buf.data, '\0', packet_size);
+  while(read(fd, send_buf.data, packet_size)) 
+  {
     // record start time when receive first data packet
     if(i == 0)
     {
@@ -416,28 +449,31 @@ void *handle_client(void *arg)
       }
     }
 
-    // set seq
-    send_buf.seq = seq;
-    seq++;
-
     // set data
     memset(send_buf.data, '1', sizeof(send_buf.data));
-   
-    if(UDT::ERROR == (ssize = UDT::send(recver2, (char *)&send_buf, sizeof(send_buf), 0))) 
+    /*if(UDT::ERROR == UDT::getsockopt(serv_data, 0, UDT_SNDBUF, &temp, &len))
     {
-      cout << "sendmsg:" << UDT::getlasterror().getErrorMessage() << endl;
+      cout << "getsockopt:" << UDT::getlasterror().getErrorMessage() << endl;
+      exit(1);
+    }
+    else{
+      cout << "send buffer data size " << temp << endl;
+    }*/
+    if(UDT::ERROR == (ssize = UDT::send(recver2, (char *)&send_buf.data, sizeof(send_buf.data), 0))) 
+    {
+      cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
       exit(1);
     }
     else
     {
       total_send_packets++;
-      total_send_size += (ssize - sizeof(send_buf.seq));
+      total_send_size += ssize;
 
     }
       
     // 40 => 1s, 12000 => 5min(300s)
     // output Result every 5 min
-    if(sec == 40 * 5 * 60)
+    /*if(sec == 40 * 5 * 60)
     {
       printf("\n\n[Result]:\n");
       printf("Client Seq: %s\n", seq_client_char);
@@ -446,11 +482,11 @@ void *handle_client(void *arg)
       printf("Interval: %d\n", interval);
       printf("Total Send Packets: %d\n", total_send_packets);
       sec = 0;
-    }
+    }*/
 
     // after sending, sleep 0.025s
-    usleep(25000);
-    sec++;
+    usleep(1000);
+    //sec++;
   }
    
   //finish time
@@ -470,6 +506,7 @@ void *handle_client(void *arg)
   cout << "Total Send Size: " << total_send_size << endl;
    
   double send_rate_bits = (total_send_packets * PACKET_SIZE * UNITS_BYTE_TO_BITS) / execute_time;
+  cout << "send_rate_bits " << send_rate_bits << endl;
   if(send_rate_bits >= UNITS_G)
   {
     send_rate_bits /= UNITS_G;

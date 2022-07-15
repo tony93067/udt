@@ -9,6 +9,8 @@
 #include <string.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <sys/times.h>
+
 
 
 #define DIE(x) perror(x),exit(1)
@@ -18,6 +20,9 @@
 /***global value***/
 int num_packets = 0;
 int num_client = 1;
+struct tms time_start,time_end;
+clock_t old_time, new_time;
+double ticks;
 //int cd = 0;
 /******************/
 
@@ -30,6 +35,7 @@ void *send_packet(void *arg)
   int send_packet = 0;
   int cd = *((int *)arg);
   int no_client = num_client;
+  int total_sendsize = 0;
   //int cd = (int *)&arg;
   num_client++;
   printf("Client %d: Start Sending Packet!\n",no_client);
@@ -38,6 +44,14 @@ void *send_packet(void *arg)
    i = 0;
    for (j = 0; j < num_packets ; j++)//number of packet
    {
+   		if(j == 0)
+   		{
+   			if((old_time = times(&time_start)) == -1)
+      		{
+        		printf("time error\n");
+        		exit(1);
+      		}
+   		}
       //fill data in packet
       if(i > 255)//data: 0-255
         i = 0;
@@ -50,11 +64,21 @@ void *send_packet(void *arg)
       {
         DIE("send");
       }
+      //printf("send size %d\n", send_size);
       send_packet++;
-      
-      // sleep 0.25s(use to control sending rate)
-      usleep(25000);
+      total_sendsize += send_size;
+      // sleep 0.025s(use to control sending rate)
+     usleep(1000);
    }
+   if((new_time = times(&time_end)) == -1)
+   {
+       printf("time error\n");
+       exit(1);
+   }
+   ticks=sysconf(_SC_CLK_TCK);
+   double execute_time = (new_time - old_time)/ticks;
+   printf("Execute Time: %2.2f\n", execute_time);
+   printf("total sendsize %d \n", total_sendsize);
    /*************/
    printf("Client %d: Total Send Packet: %d\n",no_client,send_packet);
    printf("Client %d: Packet send sucessfully!\n\n",no_client);	

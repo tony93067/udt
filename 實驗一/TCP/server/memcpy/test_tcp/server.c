@@ -21,8 +21,8 @@
 /***global value***/
 int num_packets = 0;
 int num_client = 1;
-int packet_size = 0;
-int packet_interval = 0;
+int data_size = 0;
+int data_interval = 0;
 struct tms time_start,time_end;
 clock_t old_time, new_time;
 double ticks;
@@ -44,7 +44,7 @@ void *send_packet(void *arg)
     //int cd = (int *)&arg;
     num_client++;
     printf("Client %d: Start Sending Packet!\n",no_client);
-    printf("Packet Size: %ld\n", sizeof(buffer));
+    printf("Data Size: %d\n", data_size);
     /*make packet & send packet*/
     i = 0;
     // open file
@@ -54,17 +54,18 @@ void *send_packet(void *arg)
         memset(buffer, '\0', BUFFER_SIZE);
         if(j == 0)
    		{
-   			if((old_time = times(&time_start)) == -1)
-      		{
+   		    if((old_time = times(&time_start)) == -1)
+   		    {
         		printf("time error\n");
         		exit(1);
-      		}
+      			}
    		}
-        if((return_value = read(fd, buffer, packet_size)) == -1)
+        if((return_value = read(fd, buffer, data_size)) == -1)
         {
             printf("Read error\n");
             exit(1);
         }
+        //printf("%s enter\n", buffer);
         if(return_value == 0)
             break;
         //send packet
@@ -76,7 +77,8 @@ void *send_packet(void *arg)
         send_packet++;
         total_sendsize += send_size;
         // sleep 0.025s(use to control sending rate)
-        usleep(packet_interval);
+        usleep(data_interval);
+        j++;
     }
     close(fd);
     if((new_time = times(&time_end)) == -1)
@@ -111,9 +113,9 @@ int main(int argc, char **argv)
     int ret = 0;
 //   pthread_mutex_t work = PTHREAD_MUTEX_INITIALIZER;
 
-    if(argc != 4)
+    if(argc != 3)
     {
-        printf("Usage: %s <num_packets> <packet_size> <packet_interval(us)>\n",argv[0]);
+        printf("Usage: %s <packet_size> <data_interval(us)>\n",argv[0]);
         exit(1);
     }
 
@@ -144,9 +146,9 @@ int main(int argc, char **argv)
         DIE("listen");
     }
    
-    num_packets = atoi(argv[1]);
-    packet_size = atoi(argv[2]);
-    packet_interval = atoi(argv[3]);
+    //num_packets = atoi(argv[1]);
+    data_size = atoi(argv[1]);
+    data_interval = atoi(argv[2]);
 
     while(1)
     {

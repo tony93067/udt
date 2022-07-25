@@ -17,6 +17,10 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/times.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <sys/mman.h>
+
 
 #include "cc.h"
 
@@ -42,20 +46,12 @@ void* handle_client(void*);
 #define CONTROL_DEFAULT_PORT "9000"
 #define DATA_DEFAULT_PORT "8999"
 
-// define DEFAULT_TTL(3s)
-#define DEFAULT_TTL 3000
-
 // define DEFAULT_EXECUTE_TIME
 #define DEFAULT_EXECUTE_TIME 1
 
-// define BUFFER_SIZE
-#define BUFFER_SIZE 1500
 // define SERVER_IP
 #define SERVER_IP "140.117.171.182"
 /* gloabal variables */;
-struct buffer {
-  char data[BUFFER_SIZE];
-};
 int output_interval = 5000000; // 5sec
 
 // compute execution time
@@ -70,16 +66,16 @@ int num_packets = 0;
 // port array for data_socket
 string *port_data_socket;
 int port_seq = 0;
-int packet_interval = 0;
 int MSS = 0;
-int ttl_ms = DEFAULT_TTL; // milli-second
 float ttl_s = 0.0f; // second
 int execute_time_sec = DEFAULT_EXECUTE_TIME;
-struct buffer send_buf;
 int num_client = 0;
+// used to get mmap return address
+void* file_addr;
 
 int main(int argc, char* argv[])
 {
+    
    /*if ((1 != argc) && (((2 != argc) && (3 != argc) && (4 != argc) && (5 != argc) && (6 != argc)) || (0 == atoi(argv[1]))))
    {
       cout << "usage: ./udtserver [server_port] [execute_time(sec)] [num_client] [output_interval(sec)] [ttl(msec)]" << endl;
@@ -87,7 +83,7 @@ int main(int argc, char* argv[])
    }*/
    if ((1 != argc) && (((2 != argc) && (3 != argc) && (4 != argc) && (5 != argc) && (6 != argc)) || (0 == atoi(argv[1]))))
    {
-      cout << "usage: ./udtserver [server_port] [MSS] [num_client] [output_interval(sec)] [packet_interval]" << endl;
+      cout << "usage: ./udtserver [server_port] [MSS] [num_client] [output_interval(sec)]" << endl;
       return 0;
    }
 
@@ -106,14 +102,11 @@ int main(int argc, char* argv[])
     
    string service_control(CONTROL_DEFAULT_PORT);
   
-   if(6 == argc)
+    if(5 == argc)
     {
         MSS = atoi(argv[2]);
         cout << "Setting Parameter :" << endl;
         cout << "MSS : " << MSS << endl;
-        cout << "read_size: " << BUFFER_SIZE << endl;
-        packet_interval = atoi(argv[5]);
-        cout << "Data generate interval(us): " << packet_interval << endl;
         output_interval = atoi(argv[4]) * UNITS_M; // 1us * 1Ms => 1s (because usleep use u as unit)
         cout << "output_interval: " << output_interval << endl;
         num_client = atoi(argv[3]);
@@ -129,15 +122,11 @@ int main(int argc, char* argv[])
             tmp_port++;
         }
 
-     // decide num_packets
-     //execute_time_sec = atoi(argv[2]);
-     // E.g. 10min => 10 * 60 = 600s => 600 * 40(pkt/s) = 24000(pkt) / 10min
-     //num_packets *= execute_time_sec;
 
-     // decide service_port
-     service_control = argv[1];
+    // decide service_port
+    service_control = argv[1];
 
-     cout << "port: " << argv[1] << ", MSS size: " << argv[2] << endl;
+    cout << "port: " << argv[1] << ", MSS size: " << argv[2] << endl;
    }
 
    if (0 != getaddrinfo(SERVER_IP, service_control.c_str(), &hints, &res))
@@ -233,18 +222,7 @@ void *handle_client(void *arg)
         cout << "received control data: START_TRANS" << endl;
     }
 
-    // send NUM_PACKETS to client
     int ss = 0;
-    /*char total_num_packets[NUM_PACKET_LENGTH];
-
-    // convert int into string
-    sprintf(total_num_packets,"%d",num_packets); 
-    cout << "num_packets: " << num_packets << endl;
-    if(UDT::ERROR == (ss = UDT::send(recver, total_num_packets, sizeof(total_num_packets), 0)))
-    {
-        cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
-        exit(1); 
-    }*/
 
     // send seq number to client
     char seq_client_char[NUM_PACKET_LENGTH];
@@ -259,17 +237,6 @@ void *handle_client(void *arg)
     }
     seq_client++;
 
-    /*char total_bytes[NUM_PACKET_LENGTH];
-
-    // convert int into string
-    sprintf(total_bytes,"%d",num_packets*1500); 
-    cout << "totalbytes: " << total_bytes << endl;
-    if(UDT::ERROR == (ss = UDT::send(recver, total_bytes, sizeof(total_bytes), 0)))
-    {
-        cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
-        exit(1); 
-    }
-    */
     // send port of data socket to client 
     port_seq %= num_client;
     //cout << "elements in port_data_socket: " << sizeof(port_data_socket) << endl;
@@ -312,7 +279,7 @@ void *handle_client(void *arg)
     if(UDT::ERROR == UDT::setsockopt(serv_data, 0, UDT_MSS, new int(MSS), sizeof(int)))
     {
         cout << "set UDT MSS error" << endl;
-        exit(0);
+        exit(1);
     }else
     {
         cout << "set MSS : " << MSS << endl;
@@ -381,14 +348,26 @@ void *handle_client(void *arg)
     int i = 0;
     int fd;
     int ssize = 0;
-    int return_value = 0;
-    
+    char send_buf[MSS];
+    struct stat sb;
     fd = open("/home/tony/論文code/論文code/file.txt", O_RDONLY, S_IRWXU);
-    
+    // get file info
+    if(fstat(fd, &sb) == -1)
+    {
+        printf("fstat error\n");
+        exit(1);
+    }
+    // map file to memory
+    file_addr = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if(file_addr == MAP_FAILED)
+    {
+        printf("mmap error\n");
+        exit(1);
+    }
     while(1)
     {
         // clear temporary buffer
-        memset(send_buf.data, '\0', BUFFER_SIZE);
+        memset(send_buf, '\0', MSS);
         // record start time when receive first data packet
         if(i == 0)
         {
@@ -399,42 +378,25 @@ void *handle_client(void *arg)
                 exit(1);
             }
         }
-        if((return_value = read(fd, send_buf.data, BUFFER_SIZE)) == -1)
-        {
-            printf("Read error\n");
-            exit(1);
-        }
-        //cout << "return_value : " << return_value << endl;
-        if(return_value == 0)
-            break;
-        /*if(UDT::ERROR == UDT::getsockopt(serv_data, 0, UDT_SNDBUF, &temp, &len))
-        {
-        cout << "getsockopt:" << UDT::getlasterror().getErrorMessage() << endl;
-        exit(1);
-        }
-        else{
-        cout << "send buffer data size " << temp << endl;
-        }*/
+        
         //Resent:
         ssize = 0;
-        while(ssize < return_value)
+        while(ssize < sb.st_size)
         {
-            if(UDT::ERROR == (ss = UDT::send(recver2, (char *)send_buf.data + ssize, return_value - ssize, 0))) 
+            if(UDT::ERROR == (ss = UDT::send(recver2, (char *)file_addr + ssize, MSS, 0))) 
             {
                 cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
                 exit(1);
             }
             else
             {
-                //cout << "send size : " << ss << endl;
-                ssize += ss;   
+                cout << "send size : " << ss << endl;
+                ssize += ss;
+                if((sb.st_size - ssize) < MSS)
+                    MSS = sb.st_size -ssize;
             }
         }
-        //cout << "-----------------------" << endl;
-        total_send_packets++;
-        total_send_size += ssize;
-        // after sending, sleep 0.025s
-        usleep(packet_interval);
+        total_send_size = ssize;    
         i++;
     }
     // close file

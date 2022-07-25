@@ -3,71 +3,62 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <string.h>
 #include <unistd.h>
 #define SERVER_PORT 8888
 #define BUFFER_SIZE 1500
 
-void udp_send(int fd)
-{
-    char buffer[BUFFER_SIZE];  
-    socklen_t len;
-    int send_size, recv_size;
-    struct sockaddr_in clent_addr;
-    memset(buffer, 0, BUFFER_SIZE);
-    if((recv_size = recvfrom(fd, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&clent_addr, &len)) == -1)
-    {
-        printf("recvfrom error\n");
-        exit(1);
-    }
-    printf("%s\n", buffer);
-    /*
-    while(1)
-    {
-        memset(buf, 0, BUFFER_SIZE);
-        len = sizeof(clent_addr);
-        if((send_size = sendto(fd, buf, BUFFER_SIZE, 0, (struct sockaddr*)&clent_addr, &len)) == -1)
-        {
-            printf("sendto error\n");
-            exit(1);
-        }
-        printf("client:%s\n",buf);  
-        printf("server:%s\n",buf); 
-    }*/
-}
-
-
-/*
-    server:
-            socket-->bind-->recvfrom-->sendto-->close
-*/
-
 int main(int argc, char* argv[])
 {
     int server_fd, ret;
-    struct sockaddr_in ser_addr;
+    struct sockaddr_in server_addr, client_addr;
+    int client_length = sizeof(client_addr);
 
-    server_fd = socket(AF_INET, SOCK_DGRAM, 0); //AF_INET:IPV4;SOCK_DGRAM:UDP
+    int recv_size, send_size;
+    char buffer[BUFFER_SIZE];
+
+    server_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP); 
     if(server_fd < 0)
     {
         printf("create socket fail!\n");
         return -1;
     }
 
-    memset(&ser_addr, 0, sizeof(ser_addr));
-    ser_addr.sin_family = AF_INET;
-    ser_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
-    ser_addr.sin_port = htons(SERVER_PORT);
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY); 
+    server_addr.sin_port = htons(SERVER_PORT);
 
-    ret = bind(server_fd, (struct sockaddr*)&ser_addr, sizeof(ser_addr));
+    ret = bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr));
     if(ret < 0)
     {
         printf("socket bind fail!\n");
         return -1;
     }
-
-    udp_send(server_fd);
-
+    // receive client message to get client ip and port number
+    memset(buffer, '\0', BUFFER_SIZE);
+    if ((recv_size = recvfrom(server_fd, buffer, BUFFER_SIZE, 0, (struct sockaddr*)&client_addr, &client_length)) < 0){
+        printf("Couldn't receive\n");
+        return -1;
+    }
+    printf("Received message from IP: %s and port: %i\n",
+           inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+    
+    printf("Msg from client: %s\n", buffer);
+    
+    // start to send to client
+    printf("Server Start Sending :\n");
+    while(1)
+    {
+        memset(buffer, '\0', BUFFER_SIZE);
+        strcpy(buffer, "udp test");
+        
+        if ((send_size = sendto(server_fd, buffer, strlen(buffer), 0, (struct sockaddr*)&client_addr, client_length)) < 0){
+            printf("Can't send\n");
+            return -1;
+        }
+    }
     close(server_fd);
     return 0;
 }

@@ -72,6 +72,11 @@ int execute_time_sec = DEFAULT_EXECUTE_TIME;
 int num_client = 0;
 // used to get mmap return address
 void* file_addr;
+#ifndef WIN32
+void* monitor(void*);
+#else
+DWORD WINAPI monitor(LPVOID);
+#endif
 
 int main(int argc, char* argv[])
 {
@@ -336,9 +341,9 @@ void *handle_client(void *arg)
     sockaddr_storage clientaddr2;
     int addrlen2 = sizeof(clientaddr2);
 
-    UDTSOCKET recver2;
+    UDTSOCKET recver_client;
     
-    if (UDT::INVALID_SOCK == (recver2 = UDT::accept(serv_data, (sockaddr*)&clientaddr2, &addrlen2)))
+    if (UDT::INVALID_SOCK == (recver_client = UDT::accept(serv_data, (sockaddr*)&clientaddr2, &addrlen2)))
     {
         cout << "accept(serv_data): " << UDT::getlasterror().getErrorMessage() << endl;
         exit(1);
@@ -378,12 +383,13 @@ void *handle_client(void *arg)
                 printf("time error\n");
                 exit(1);
             }
+            pthread_create(new pthread_t, NULL, monitor, &recver_client);
         }
         
         //Resent:
         if(ssize < sb.st_size)
         {
-            if(UDT::ERROR == (ss = UDT::send(recver2, (char *)file_addr + ssize, transmit_size, 0))) 
+            if(UDT::ERROR == (ss = UDT::send(recver_client, (char *)file_addr + ssize, transmit_size, 0))) 
             {
                 cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
                 exit(1);
@@ -398,6 +404,9 @@ void *handle_client(void *arg)
                 //    MSS = sb.st_size -ssize;
             }
         }
+        // transmit finish
+        if(ssize == sb.st_size)
+            break;
         total_send_size = ssize;    
         i++;
     }
@@ -464,9 +473,70 @@ void *handle_client(void *arg)
         printf("get END_TRANS(Client Seq: %s)\n", seq_client_char);
         
         UDT::close(serv_data);
-        UDT::close(recver2);
+        UDT::close(recver_client);
     }
 
     return NULL;
 }
+#ifndef WIN32
+void* monitor(void* s)
+#else
+DWORD WINAPI monitor(LPVOID s)
+#endif
+{
+    UDTSOCKET u = *(UDTSOCKET*)s;
 
+    UDT::TRACEINFO perf;
+    int monitor_fd;
+    char str[100];
+    
+    // record monitor data
+    monitor_fd = open("monitor.txt", O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
+    memset(str, '\0', 100);
+    strcpy(str, "SendRate(Mb/s)\tRTT(ms)\tCWnd\tPktSndPeriod(us)\tRecvACK\tRecvNAK");
+	if(write(monitor_fd, str, strlen(str)) < 0)
+    {
+        cout << "write error" << endl;
+        exit(1);
+    }
+    cout << "SendRate(Mb/s)\tRTT(ms)\tCWnd\tPktSndPeriod(us)\tRecvACK\tRecvNAK" << endl;
+    while (true)
+    {
+        memset(str, '\0', 100);
+        #ifndef WIN32
+            sleep(1);
+        #else
+            Sleep(1000);
+        #endif
+            
+        if (UDT::ERROR == UDT::perfmon(u, &perf))
+        {
+            cout << "perfmon: " << UDT::getlasterror().getErrorMessage() << endl;
+            break;
+        }
+        sprintf(str, "%f\t\t%f\t%d\t%f\t\t\t%d\t%d\n", perf.mbpsSendRate, 
+            perf.msRTT, perf.pktCongestionWindow, perf.usPktSndPeriod, perf.pktRecvACK, perf.pktRecvNAK);
+        if(write(monitor_fd, str, strlen(str)) < 0)
+        {
+            cout << "write error" << endl;
+            exit(1);
+        }
+        cout << perf.mbpsSendRate << "\t\t" 
+            << perf.msRTT << "\t" 
+            << perf.pktCongestionWindow << "\t" 
+            << perf.usPktSndPeriod << "\t\t\t" 
+            << perf.pktRecvACK << "\t" 
+            << perf.pktRecvNAK << endl;
+    }
+    if(write(monitor_fd, "\n", sizeof("\n")) < 0)
+    {
+        cout << "write error" << endl;
+        exit(1);
+    }
+    close(monitor_fd);
+    #ifndef WIN32
+        return NULL;
+    #else
+        return 0;
+    #endif
+}

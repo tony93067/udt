@@ -83,7 +83,7 @@ int main(int argc, char* argv[])
    }*/
    if ((1 != argc) && (((2 != argc) && (3 != argc) && (4 != argc) && (5 != argc) && (6 != argc)) || (0 == atoi(argv[1]))))
    {
-      cout << "usage: ./udtserver [server_port] [MSS] [num_client] [output_interval(sec)]" << endl;
+      cout << "usage: ./udtserver [server_port] [MSS] [num_client]" << endl;
       return 0;
    }
 
@@ -102,13 +102,11 @@ int main(int argc, char* argv[])
     
    string service_control(CONTROL_DEFAULT_PORT);
   
-    if(5 == argc)
+    if(4 == argc)
     {
         MSS = atoi(argv[2]);
         cout << "Setting Parameter :" << endl;
         cout << "MSS : " << MSS << endl;
-        output_interval = atoi(argv[4]) * UNITS_M; // 1us * 1Ms => 1s (because usleep use u as unit)
-        cout << "output_interval: " << output_interval << endl;
         num_client = atoi(argv[3]);
         // port_data_socket = (string*)malloc(num_client * sizeof(string));
         port_data_socket = new string[num_client];
@@ -364,6 +362,9 @@ void *handle_client(void *arg)
         printf("mmap error\n");
         exit(1);
     }
+    int transmit_size = 0;
+    transmit_size = sb.st_size;
+    ssize = 0;
     while(1)
     {
         // clear temporary buffer
@@ -380,10 +381,9 @@ void *handle_client(void *arg)
         }
         
         //Resent:
-        ssize = 0;
-        while(ssize < sb.st_size)
+        if(ssize < sb.st_size)
         {
-            if(UDT::ERROR == (ss = UDT::send(recver2, (char *)file_addr + ssize, MSS, 0))) 
+            if(UDT::ERROR == (ss = UDT::send(recver2, (char *)file_addr + ssize, transmit_size, 0))) 
             {
                 cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
                 exit(1);
@@ -392,8 +392,10 @@ void *handle_client(void *arg)
             {
                 cout << "send size : " << ss << endl;
                 ssize += ss;
-                if((sb.st_size - ssize) < MSS)
-                    MSS = sb.st_size -ssize;
+                cout << "ssize : " << ssize << endl;
+                transmit_size -= ss;
+                //if((sb.st_size - ssize) < MSS)
+                //    MSS = sb.st_size -ssize;
             }
         }
         total_send_size = ssize;    

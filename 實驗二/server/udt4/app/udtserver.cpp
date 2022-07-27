@@ -341,9 +341,9 @@ void *handle_client(void *arg)
     sockaddr_storage clientaddr2;
     int addrlen2 = sizeof(clientaddr2);
 
-    UDTSOCKET recver_client;
+    UDTSOCKET recver2;
     
-    if (UDT::INVALID_SOCK == (recver_client = UDT::accept(serv_data, (sockaddr*)&clientaddr2, &addrlen2)))
+    if (UDT::INVALID_SOCK == (recver2 = UDT::accept(serv_data, (sockaddr*)&clientaddr2, &addrlen2)))
     {
         cout << "accept(serv_data): " << UDT::getlasterror().getErrorMessage() << endl;
         exit(1);
@@ -383,28 +383,27 @@ void *handle_client(void *arg)
                 printf("time error\n");
                 exit(1);
             }
-            pthread_create(new pthread_t, NULL, monitor, &recver_client);
+            pthread_create(new pthread_t, NULL, monitor, &recver2);
         }
         
         //Resent:
         if(ssize < sb.st_size)
         {
-            if(UDT::ERROR == (ss = UDT::send(recver_client, (char *)file_addr + ssize, transmit_size, 0))) 
+            if(UDT::ERROR == (ss = UDT::send(recver2, (char *)file_addr + ssize, transmit_size, 0))) 
             {
                 cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
                 exit(1);
             }
             else
             {
-                cout << "send size : " << ss << endl;
+                //cout << "send size : " << ss << endl;
                 ssize += ss;
-                cout << "ssize : " << ssize << endl;
+                //cout << "ssize : " << ssize << endl;
                 transmit_size -= ss;
                 //if((sb.st_size - ssize) < MSS)
                 //    MSS = sb.st_size -ssize;
             }
         }
-        // transmit finish
         if(ssize == sb.st_size)
             break;
         total_send_size = ssize;    
@@ -473,11 +472,12 @@ void *handle_client(void *arg)
         printf("get END_TRANS(Client Seq: %s)\n", seq_client_char);
         
         UDT::close(serv_data);
-        UDT::close(recver_client);
+        UDT::close(recver2);
     }
 
     return NULL;
 }
+
 #ifndef WIN32
 void* monitor(void* s)
 #else
@@ -493,7 +493,7 @@ DWORD WINAPI monitor(LPVOID s)
     // record monitor data
     monitor_fd = open("monitor.txt", O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
     memset(str, '\0', 100);
-    strcpy(str, "SendRate(Mb/s)\tRTT(ms)\tCWnd\tPktSndPeriod(us)\tRecvACK\tRecvNAK");
+    strcpy(str, "SendRate(Mb/s)\tRTT(ms)\tCWnd\tPktSndPeriod(us)\tRecvACK\tRecvNAK\n");
 	if(write(monitor_fd, str, strlen(str)) < 0)
     {
         cout << "write error" << endl;

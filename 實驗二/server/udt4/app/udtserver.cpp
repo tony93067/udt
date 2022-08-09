@@ -20,6 +20,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <fstream>
 
 
 #include "cc.h"
@@ -109,7 +110,7 @@ int main(int argc, char* argv[])
   
     if(4 == argc)
     {
-        MSS = atoi(argv[2]);
+        MSS = atoi(argv[2]) + 100;
         cout << "Setting Parameter :" << endl;
         cout << "MSS : " << MSS << endl;
         num_client = atoi(argv[3]);
@@ -278,7 +279,7 @@ void *handle_client(void *arg)
     // exchange data packet
     UDTSOCKET serv_data = UDT::socket(res->ai_family, res->ai_socktype, res->ai_protocol);
     // UDT Options
-    //UDT::setsockopt(serv, 0, UDT_CC, new CCCFactory<CUDPBlast>, sizeof(CCCFactory<CUDPBlast>));
+    UDT::setsockopt(serv_data, 0, UDT_CC, new CCCFactory<CUDPBlast>, sizeof(CCCFactory<CUDPBlast>));
     if(UDT::ERROR == UDT::setsockopt(serv_data, 0, UDT_MSS, new int(MSS), sizeof(int)))
     {
         cout << "set UDT MSS error" << endl;
@@ -287,6 +288,13 @@ void *handle_client(void *arg)
     {
         cout << "set MSS : " << MSS << endl;
     }
+    // using CC method
+    CUDPBlast* cchandle = NULL;
+    int temp;
+    UDT::getsockopt(serv_data, 0, UDT_CC, &cchandle, &temp);
+    if (NULL != cchandle)
+        cchandle->setRate(500);
+    
     //UDT::setsockopt(serv, 0, UDT_RCVBUF, new int(10000000), sizeof(int));
     //UDT::setsockopt(serv, 0, UDP_RCVBUF, new int(10000000), sizeof(int));
     //UDT::setsockopt(serv_data, 0, UDT_REUSEADDR, new bool(false), sizeof(bool));
@@ -324,6 +332,8 @@ void *handle_client(void *arg)
     {
         cout << "UDP RECV Buffer size : " << sndbuf << endl;
     }
+
+    // bind
     if (UDT::ERROR == UDT::bind(serv_data, res->ai_addr, res->ai_addrlen))
     {
         cout << "bind(serv_data): " << UDT::getlasterror().getErrorMessage() << endl;
@@ -404,9 +414,10 @@ void *handle_client(void *arg)
                 //    MSS = sb.st_size -ssize;
             }
         }
+        total_send_size = ssize;
         if(ssize == sb.st_size)
             break;
-        total_send_size = ssize;    
+        
         i++;
     }
     // close file
@@ -485,15 +496,16 @@ DWORD WINAPI monitor(LPVOID s)
 #endif
 {
     UDTSOCKET u = *(UDTSOCKET*)s;
-
+    int zero_times = 0;
     UDT::TRACEINFO perf;
     int monitor_fd;
     char str[100];
-    
+    fstream fout("CUDPBlast_test.csv", ios::out);
     // record monitor data
     monitor_fd = open("monitor.txt", O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
     memset(str, '\0', 100);
-    strcpy(str, "SendRate(Mb/s)\tRTT(ms)\tCWnd\tPktSndPeriod(us)\tRecvACK\tRecvNAK\n");
+    sprintf(str, "MSS : %d\nSendRate(Mb/s)\tRTT(ms)\tCWnd\tPktSndPeriod(us)\tRecvACK\tRecvNAK\n", MSS);
+    fout << "SendRate(Mb/s)," << "RTT(ms)," << "CWnd," << "PktSndPeriod(us)," << "RecvACK," << "RecvNAK" << endl;
 	if(write(monitor_fd, str, strlen(str)) < 0)
     {
         cout << "write error" << endl;
@@ -516,23 +528,35 @@ DWORD WINAPI monitor(LPVOID s)
         }
         sprintf(str, "%f\t\t%f\t%d\t%f\t\t\t%d\t%d\n", perf.mbpsSendRate, 
             perf.msRTT, perf.pktCongestionWindow, perf.usPktSndPeriod, perf.pktRecvACK, perf.pktRecvNAK);
+        fout << perf.mbpsSendRate << "," << perf.msRTT << "," << perf.pktCongestionWindow << ","
+            << perf.usPktSndPeriod << "," << perf.pktRecvACK << "," << perf.pktRecvNAK << endl;
+        if(perf.mbpsSendRate == 0 && perf.pktRecvACK == 0 && perf.pktRecvNAK == 0)
+        {
+            zero_times++;
+        }else
+        {
+            zero_times = 0;
+        }
+        if(zero_times >= 5)
+            break;
         if(write(monitor_fd, str, strlen(str)) < 0)
         {
             cout << "write error" << endl;
             exit(1);
         }
-        cout << perf.mbpsSendRate << "\t\t" 
+        /*cout << perf.mbpsSendRate << "\t\t" 
             << perf.msRTT << "\t" 
             << perf.pktCongestionWindow << "\t" 
             << perf.usPktSndPeriod << "\t\t\t" 
             << perf.pktRecvACK << "\t" 
-            << perf.pktRecvNAK << endl;
+            << perf.pktRecvNAK << endl;*/
     }
     if(write(monitor_fd, "\n", sizeof("\n")) < 0)
     {
         cout << "write error" << endl;
         exit(1);
     }
+    fout.close();
     close(monitor_fd);
     #ifndef WIN32
         return NULL;

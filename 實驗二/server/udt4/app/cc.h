@@ -88,11 +88,8 @@ class CUDPBlast: public CCC
 public:
    CUDPBlast()
    {
-      printf(" CUDPBlast\n");
-      // m_dPktSndPeriod = 1000000; 
-      m_dPktSndPeriod = 0.0;
+      m_dPktSndPeriod = 1000000; 
       m_dCWndSize = 83333.0; 
-      // m_dCWndSize = 2.0;
    }
 
 public:

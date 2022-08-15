@@ -260,6 +260,7 @@ public:
    virtual void onACK(const int32_t&);
    virtual void onLoss(const int32_t*, const int&);
    virtual void onTimeout();
+   virtual void onPktSent(const CPacket*);
 
 private:
    int m_iRCInterval;			// UDT Rate control interval

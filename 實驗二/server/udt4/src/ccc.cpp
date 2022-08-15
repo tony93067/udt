@@ -43,6 +43,9 @@ written by
 #include "ccc.h"
 #include <cmath>
 #include <cstring>
+#include <iostream>
+
+using namespace std;
 
 CCC::CCC():
 m_iSYNInterval(CUDT::m_iSYNInterval),
@@ -317,4 +320,8 @@ void CUDTCC::onTimeout()
       m_iLastDecSeq = m_iLastAck;
       */
    }
+}
+void CUDTCC::onPktSent(const CPacket* packet)
+{
+	cout << "Packet Payload : " << packet->getLength() << endl;
 }

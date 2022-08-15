@@ -110,7 +110,7 @@ int main(int argc, char* argv[])
   
     if(4 == argc)
     {
-        MSS = atoi(argv[2]) + 100;
+        MSS = atoi(argv[2]);
         cout << "Setting Parameter :" << endl;
         cout << "MSS : " << MSS << endl;
         num_client = atoi(argv[3]);
@@ -142,11 +142,6 @@ int main(int argc, char* argv[])
    // exchange control packet
    UDTSOCKET serv = UDT::socket(res->ai_family, res->ai_socktype, res->ai_protocol);
 
-   // UDT Options
-   //UDT::setsockopt(serv, 0, UDT_CC, new CCCFactory<CUDPBlast>, sizeof(CCCFactory<CUDPBlast>));
-   //UDT::setsockopt(serv, 0, UDT_MSS, new int(9000), sizeof(int));
-   //UDT::setsockopt(serv, 0, UDT_RCVBUF, new int(10000000), sizeof(int));
-   //UDT::setsockopt(serv, 0, UDP_RCVBUF, new int(10000000), sizeof(int));
    UDT::setsockopt(serv, 0, UDT_REUSEADDR, new bool(false), sizeof(bool));
 
    if (UDT::ERROR == UDT::bind(serv, res->ai_addr, res->ai_addrlen))
@@ -279,7 +274,7 @@ void *handle_client(void *arg)
     // exchange data packet
     UDTSOCKET serv_data = UDT::socket(res->ai_family, res->ai_socktype, res->ai_protocol);
     // UDT Options
-    UDT::setsockopt(serv_data, 0, UDT_CC, new CCCFactory<CUDPBlast>, sizeof(CCCFactory<CUDPBlast>));
+    UDT::setsockopt(serv_data, 0, UDT_CC, new CCCFactory<CTCP>, sizeof(CCCFactory<CTCP>));
     if(UDT::ERROR == UDT::setsockopt(serv_data, 0, UDT_MSS, new int(MSS), sizeof(int)))
     {
         cout << "set UDT MSS error" << endl;
@@ -289,12 +284,12 @@ void *handle_client(void *arg)
         cout << "set MSS : " << MSS << endl;
     }
     // using CC method
-    CUDPBlast* cchandle = NULL;
+    /*CUDPBlast* cchandle = NULL;
     int temp;
     UDT::getsockopt(serv_data, 0, UDT_CC, &cchandle, &temp);
     if (NULL != cchandle)
         cchandle->setRate(500);
-    
+    */
     //UDT::setsockopt(serv, 0, UDT_RCVBUF, new int(10000000), sizeof(int));
     //UDT::setsockopt(serv, 0, UDP_RCVBUF, new int(10000000), sizeof(int));
     //UDT::setsockopt(serv_data, 0, UDT_REUSEADDR, new bool(false), sizeof(bool));
@@ -495,26 +490,24 @@ void* monitor(void* s)
 DWORD WINAPI monitor(LPVOID s)
 #endif
 {
+    char method[15];
     UDTSOCKET u = *(UDTSOCKET*)s;
     int zero_times = 0;
     UDT::TRACEINFO perf;
-    int monitor_fd;
-    char str[100];
-    fstream fout("CUDPBlast_test.csv", ios::out);
+    fstream fout("test.csv", ios::out|ios::app);
+    
+    memset(method, '\0', sizeof(method));
+    strcpy(method, "CTCP");
+    fout << endl << endl;
+    fout << "Method," << method << endl;
     // record monitor data
-    monitor_fd = open("monitor.txt", O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
-    memset(str, '\0', 100);
-    sprintf(str, "MSS : %d\nSendRate(Mb/s)\tRTT(ms)\tCWnd\tPktSndPeriod(us)\tRecvACK\tRecvNAK\n", MSS);
+    //monitor_fd = open("monitor.txt", O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
+    //sprintf(str, "MSS : %d\nSendRate(Mb/s)\tRTT(ms)\tCWnd\tPktSndPeriod(us)\tRecvACK\tRecvNAK\n", MSS);
+    fout << "MSS," << MSS << endl;
     fout << "SendRate(Mb/s)," << "RTT(ms)," << "CWnd," << "PktSndPeriod(us)," << "RecvACK," << "RecvNAK" << endl;
-	if(write(monitor_fd, str, strlen(str)) < 0)
-    {
-        cout << "write error" << endl;
-        exit(1);
-    }
-    cout << "SendRate(Mb/s)\tRTT(ms)\tCWnd\tPktSndPeriod(us)\tRecvACK\tRecvNAK" << endl;
+    //cout << "SendRate(Mb/s)\tRTT(ms)\tCWnd\tPktSndPeriod(us)\tRecvACK\tRecvNAK" << endl;
     while (true)
     {
-        memset(str, '\0', 100);
         #ifndef WIN32
             sleep(1);
         #else
@@ -526,8 +519,7 @@ DWORD WINAPI monitor(LPVOID s)
             cout << "perfmon: " << UDT::getlasterror().getErrorMessage() << endl;
             break;
         }
-        sprintf(str, "%f\t\t%f\t%d\t%f\t\t\t%d\t%d\n", perf.mbpsSendRate, 
-            perf.msRTT, perf.pktCongestionWindow, perf.usPktSndPeriod, perf.pktRecvACK, perf.pktRecvNAK);
+        
         fout << perf.mbpsSendRate << "," << perf.msRTT << "," << perf.pktCongestionWindow << ","
             << perf.usPktSndPeriod << "," << perf.pktRecvACK << "," << perf.pktRecvNAK << endl;
         if(perf.mbpsSendRate == 0 && perf.pktRecvACK == 0 && perf.pktRecvNAK == 0)
@@ -539,11 +531,6 @@ DWORD WINAPI monitor(LPVOID s)
         }
         if(zero_times >= 5)
             break;
-        if(write(monitor_fd, str, strlen(str)) < 0)
-        {
-            cout << "write error" << endl;
-            exit(1);
-        }
         /*cout << perf.mbpsSendRate << "\t\t" 
             << perf.msRTT << "\t" 
             << perf.pktCongestionWindow << "\t" 
@@ -551,13 +538,8 @@ DWORD WINAPI monitor(LPVOID s)
             << perf.pktRecvACK << "\t" 
             << perf.pktRecvNAK << endl;*/
     }
-    if(write(monitor_fd, "\n", sizeof("\n")) < 0)
-    {
-        cout << "write error" << endl;
-        exit(1);
-    }
+    fout << endl << endl;
     fout.close();
-    close(monitor_fd);
     #ifndef WIN32
         return NULL;
     #else

@@ -104,7 +104,6 @@ int main(int argc, char* argv[])
    hints.ai_flags = AI_PASSIVE;
    hints.ai_family = PF_INET;
    hints.ai_socktype = SOCK_STREAM;
-   //hints.ai_socktype = SOCK_DGRAM;
     
    string service_control(CONTROL_DEFAULT_PORT);
   
@@ -114,7 +113,6 @@ int main(int argc, char* argv[])
         cout << "Setting Parameter :" << endl;
         cout << "MSS : " << MSS << endl;
         num_client = atoi(argv[3]);
-        // port_data_socket = (string*)malloc(num_client * sizeof(string));
         port_data_socket = new string[num_client];
         // create port
         int tmp_port = 5100;
@@ -271,10 +269,12 @@ void *handle_client(void *arg)
         cout << "illegal port number or port is busy.\n" << endl;
         exit(1);
     }
+
+    //----------------------------------------------------------------------------------------
     // exchange data packet
     UDTSOCKET serv_data = UDT::socket(res->ai_family, res->ai_socktype, res->ai_protocol);
     // UDT Options
-    UDT::setsockopt(serv_data, 0, UDT_CC, new CCCFactory<CTCP>, sizeof(CCCFactory<CTCP>));
+    UDT::setsockopt(serv_data, 0, UDT_CC, new CCCFactory<CUDPBlast>, sizeof(CCCFactory<CUDPBlast>));
     if(UDT::ERROR == UDT::setsockopt(serv_data, 0, UDT_MSS, new int(MSS), sizeof(int)))
     {
         cout << "set UDT MSS error" << endl;
@@ -283,20 +283,14 @@ void *handle_client(void *arg)
     {
         cout << "set MSS : " << MSS << endl;
     }
-    // using CC method
-    /*CUDPBlast* cchandle = NULL;
-    int temp;
-    UDT::getsockopt(serv_data, 0, UDT_CC, &cchandle, &temp);
-    if (NULL != cchandle)
-        cchandle->setRate(500);
-    */
+   
     //UDT::setsockopt(serv, 0, UDT_RCVBUF, new int(10000000), sizeof(int));
     //UDT::setsockopt(serv, 0, UDP_RCVBUF, new int(10000000), sizeof(int));
     //UDT::setsockopt(serv_data, 0, UDT_REUSEADDR, new bool(false), sizeof(bool));
     
     int sndbuf = 0;
     int oplen = sizeof(int);
-    if (UDT::ERROR == UDT::getsockopt(serv_data, 0, UDT_SNDBUF, (char*)&sndbuf, &oplen))
+    /*if (UDT::ERROR == UDT::getsockopt(serv_data, 0, UDT_SNDBUF, (char*)&sndbuf, &oplen))
     {
         cout << "getsockopt error" << endl;
     }else
@@ -327,14 +321,13 @@ void *handle_client(void *arg)
     {
         cout << "UDP RECV Buffer size : " << sndbuf << endl;
     }
-
+    */
     // bind
     if (UDT::ERROR == UDT::bind(serv_data, res->ai_addr, res->ai_addrlen))
     {
         cout << "bind(serv_data): " << UDT::getlasterror().getErrorMessage() << endl;
         exit(1);
     }
-        
     freeaddrinfo(res);
 
     if (UDT::ERROR == UDT::listen(serv_data, num_client))
@@ -352,6 +345,21 @@ void *handle_client(void *arg)
     {
         cout << "accept(serv_data): " << UDT::getlasterror().getErrorMessage() << endl;
         exit(1);
+    }
+    // using CC method
+    CUDPBlast* cchandle = NULL;
+    int temp;
+    if (UDT::ERROR == UDT::getsockopt(serv_data, 0, UDT_CC, &cchandle, &temp))
+    {
+        cout << "getsockopt(serv_data): " << UDT::getlasterror().getErrorMessage() << endl;
+        exit(1);
+    }else
+        cout << "getsockopt(serv_data success)" << endl;
+    if (NULL != cchandle)
+    {
+        cout << "enter set rate" << endl;
+        cchandle->setRate(500);
+        cchandle->test();
     }
     int i = 0;
     int fd;
@@ -497,14 +505,14 @@ DWORD WINAPI monitor(LPVOID s)
     fstream fout("test.csv", ios::out|ios::app);
     
     memset(method, '\0', sizeof(method));
-    strcpy(method, "CTCP");
+    strcpy(method, "CUDPBlast");
     fout << endl << endl;
     fout << "Method," << method << endl;
     // record monitor data
     //monitor_fd = open("monitor.txt", O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
     //sprintf(str, "MSS : %d\nSendRate(Mb/s)\tRTT(ms)\tCWnd\tPktSndPeriod(us)\tRecvACK\tRecvNAK\n", MSS);
     fout << "MSS," << MSS << endl;
-    fout << "SendRate(Mb/s)," << "RTT(ms)," << "CWnd," << "PktSndPeriod(us)," << "RecvACK," << "RecvNAK" << endl;
+    fout << "SendRate(Mb/s)," << "ReceiveRate(Mb/s)," << "RTT(ms)," << "CWnd," << "FlowWindow," << "PktSndPeriod(us)," << "RecvACK," << "RecvNAK," << "EstimatedBandwidth(Mb/s)" << endl;
     //cout << "SendRate(Mb/s)\tRTT(ms)\tCWnd\tPktSndPeriod(us)\tRecvACK\tRecvNAK" << endl;
     while (true)
     {
@@ -520,8 +528,8 @@ DWORD WINAPI monitor(LPVOID s)
             break;
         }
         
-        fout << perf.mbpsSendRate << "," << perf.msRTT << "," << perf.pktCongestionWindow << ","
-            << perf.usPktSndPeriod << "," << perf.pktRecvACK << "," << perf.pktRecvNAK << endl;
+        fout << perf.mbpsSendRate << "," << perf.mbpsRecvRate << "," << perf.msRTT << "," << perf.pktCongestionWindow << ","
+            << perf.pktFlowWindow << "," << perf.usPktSndPeriod << "," << perf.pktRecvACK << "," << perf.pktRecvNAK << "," << perf.mbpsBandwidth << endl;
         if(perf.mbpsSendRate == 0 && perf.pktRecvACK == 0 && perf.pktRecvNAK == 0)
         {
             zero_times++;

@@ -1,6 +1,6 @@
 #include <udt.h>
 #include <ccc.h>
-
+#include <stdio.h>
 class CTCP: public CCC
 {
 public:
@@ -95,6 +95,11 @@ public:
 public:
    void setRate(double mbps)
    {
-      m_dPktSndPeriod = (m_iMSS * 8.0) / mbps;
+      m_dPktSndPeriod = 0;
+      printf("pkt send period %f\n", m_dPktSndPeriod);
+   }
+   void test()
+   {
+      printf("test\n");
    }
 };

@@ -323,5 +323,5 @@ void CUDTCC::onTimeout()
 }
 void CUDTCC::onPktSent(const CPacket* packet)
 {
-	cout << "Packet Payload : " << packet->getLength() << endl;
+	//cout << "Packet Payload : " << packet->getLength() << endl;
 }

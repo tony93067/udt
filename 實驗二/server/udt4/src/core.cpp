@@ -54,6 +54,7 @@ written by
 #endif
 #include <cmath>
 #include <sstream>
+#include <iostream>
 #include "queue.h"
 #include "core.h"
 
@@ -571,6 +572,7 @@ void CUDT::listen()
 
 void CUDT::connect(const sockaddr* serv_addr)
 {
+   cout << "CUDT::connect(const sockaddr* serv_addr)" << endl;
    CGuard cg(m_ConnectionLock);
 
    if (!m_bOpened)
@@ -694,6 +696,7 @@ void CUDT::connect(const sockaddr* serv_addr)
 
 int CUDT::connect(const CPacket& response) throw ()
 {
+   cout << "enter CUDT::connect(const CPacket& response)" << endl;
    // this is the 2nd half of a connection request. If the connection is setup successfully this returns 0.
    // returning -1 means there is an error.
    // returning 1 or 2 means the connection is in process and needs more handshake
@@ -816,6 +819,7 @@ POST_CONNECT:
 
 void CUDT::connect(const sockaddr* peer, CHandShake* hs)
 {
+   cout << "enter CUDT::connect(const sockaddr* peer, CHandShake* hs)" << endl;
    CGuard cg(m_ConnectionLock);
 
    // Uses the smaller MSS between the peers        
@@ -883,6 +887,7 @@ void CUDT::connect(const sockaddr* peer, CHandShake* hs)
    }
 
    m_pCC = m_pCCFactory->create();
+   cout << "class create" << endl;
    m_pCC->m_UDT = m_SocketID;
    m_pCC->setMSS(m_iMSS);
    m_pCC->setMaxCWndSize((int&)m_iFlowWindowSize);

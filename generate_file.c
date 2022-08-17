@@ -11,7 +11,7 @@ int main()
     int fd, j = 0;
     fd = open("file.txt", O_RDWR|O_CREAT, S_IRWXU);
     char* data = (char*) malloc(sizeof(char)*SIZE);
-    for(int i = 0; i < 1000; i++)
+    for(int i = 0; i < 500; i++)
     {
         for(int k = 0; k < 1000; k++)
         {

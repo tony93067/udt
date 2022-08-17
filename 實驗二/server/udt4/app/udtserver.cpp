@@ -40,8 +40,8 @@ void* handle_client(void*);
 #define UNITS_K 1000
 #define UNITS_BYTE_TO_BITS 8
 
-// define packet size
-#define NUM_PACKET_LENGTH 1000
+// define buffer size
+#define BUFFER_SIZE 10000
 
 // define DEFAULT_PORT
 #define CONTROL_DEFAULT_PORT "9000"
@@ -52,18 +52,19 @@ void* handle_client(void*);
 
 // define SERVER_IP
 #define SERVER_IP "140.117.171.182"
-/* gloabal variables */;
-int output_interval = 5000000; // 5sec
 
 // compute execution time
 clock_t old_time, new_time;
 struct tms time_start,time_end;//use for count executing time
 double ticks;
+
 // number of clients
 int total_number_clients = 0;
 int seq_client = 1;
-// number of packets
-int num_packets = 0;
+
+// Recive Buffer
+char recv_buf[BUFFER_SIZE];
+
 // port array for data_socket
 string *port_data_socket;
 int port_seq = 0;
@@ -71,6 +72,7 @@ int MSS = 0;
 float ttl_s = 0.0f; // second
 int execute_time_sec = DEFAULT_EXECUTE_TIME;
 int num_client = 0;
+
 // used to get mmap return address
 void* file_addr;
 #ifndef WIN32
@@ -193,11 +195,13 @@ int main(int argc, char* argv[])
 void *handle_client(void *arg)
 {
     UDTSOCKET recver = *((UDTSOCKET *)arg);
-    // packets
-    int total_send_packets = 0;
-    int total_send_size = 0;
+    
     //int sec = 0;
     //int interval = 0;
+
+    // use to get getsockopt return variable and value
+    int sndbuf = 0;
+    int oplen = sizeof(int);
     
     total_number_clients++;
     
@@ -222,7 +226,7 @@ void *handle_client(void *arg)
     int ss = 0;
 
     // send seq number to client
-    char seq_client_char[NUM_PACKET_LENGTH];
+    char seq_client_char[1000];
 
     // convert int into string
     sprintf(seq_client_char,"%d", seq_client); 
@@ -234,7 +238,7 @@ void *handle_client(void *arg)
     }
     seq_client++;
 
-    // send port of data socket to client 
+    // send port number to client 
     port_seq %= num_client;
     //cout << "elements in port_data_socket: " << sizeof(port_data_socket) << endl;
     if(UDT::ERROR == (ss = UDT::send(recver, (char *)port_data_socket[port_seq].c_str(), sizeof(port_data_socket[port_seq].c_str()), 0)))
@@ -246,7 +250,7 @@ void *handle_client(void *arg)
     string service_data(DATA_DEFAULT_PORT);
     if(ss > 0)
     {
-        cout << "port: " << (char *)port_data_socket[port_seq].c_str() << ", sizeof(port[port_seq]): " << sizeof(port_data_socket[port_seq].c_str()) << endl << endl;
+        cout << "port: " << (char *)port_data_socket[port_seq].c_str() << endl;
         service_data = port_data_socket[port_seq]; 
         port_seq++;
     }
@@ -272,10 +276,12 @@ void *handle_client(void *arg)
 
     //----------------------------------------------------------------------------------------
     // exchange data packet
-    UDTSOCKET serv_data = UDT::socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    UDTSOCKET server_data = UDT::socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+
+
     // UDT Options
-    UDT::setsockopt(serv_data, 0, UDT_CC, new CCCFactory<CUDPBlast>, sizeof(CCCFactory<CUDPBlast>));
-    if(UDT::ERROR == UDT::setsockopt(serv_data, 0, UDT_MSS, new int(MSS), sizeof(int)))
+    //UDT::setsockopt(server_data, 0, UDT_CC, new CCCFactory<CUDPBlast>, sizeof(CCCFactory<CUDPBlast>));
+    if(UDT::ERROR == UDT::setsockopt(server_data, 0, UDT_MSS, new int(MSS), sizeof(int)))
     {
         cout << "set UDT MSS error" << endl;
         exit(1);
@@ -288,8 +294,18 @@ void *handle_client(void *arg)
     //UDT::setsockopt(serv, 0, UDP_RCVBUF, new int(10000000), sizeof(int));
     //UDT::setsockopt(serv_data, 0, UDT_REUSEADDR, new bool(false), sizeof(bool));
     
-    int sndbuf = 0;
-    int oplen = sizeof(int);
+
+
+    // set receive timeout 20 second
+    if (UDT::ERROR == UDT::setsockopt(server_data, 0, UDT_RCVTIMEO, new int(20000), sizeof(int)))
+    {
+        cout << "set RCV timeout error" << endl;
+    }else
+    {
+        UDT::getsockopt(server_data, 0, UDT_RCVTIMEO, (char *)&sndbuf, &oplen);
+        cout << "Set RCV timeout : "<< sndbuf << endl;
+    }
+    
     /*if (UDT::ERROR == UDT::getsockopt(serv_data, 0, UDT_SNDBUF, (char*)&sndbuf, &oplen))
     {
         cout << "getsockopt error" << endl;
@@ -322,106 +338,84 @@ void *handle_client(void *arg)
         cout << "UDP RECV Buffer size : " << sndbuf << endl;
     }
     */
+
     // bind
-    if (UDT::ERROR == UDT::bind(serv_data, res->ai_addr, res->ai_addrlen))
+    if (UDT::ERROR == UDT::bind(server_data, res->ai_addr, res->ai_addrlen))
     {
-        cout << "bind(serv_data): " << UDT::getlasterror().getErrorMessage() << endl;
+        cout << "bind(server_data): " << UDT::getlasterror().getErrorMessage() << endl;
         exit(1);
     }
     freeaddrinfo(res);
 
-    if (UDT::ERROR == UDT::listen(serv_data, num_client))
+    // listen
+    if (UDT::ERROR == UDT::listen(server_data, num_client))
     {
-        cout << "listen(serv_data): " << UDT::getlasterror().getErrorMessage() << endl;
+        cout << "listen(server_data): " << UDT::getlasterror().getErrorMessage() << endl;
         exit(1);
     }
 
+    // accept
     sockaddr_storage clientaddr2;
     int addrlen2 = sizeof(clientaddr2);
 
-    UDTSOCKET recver2;
+    UDTSOCKET client_data;
     
-    if (UDT::INVALID_SOCK == (recver2 = UDT::accept(serv_data, (sockaddr*)&clientaddr2, &addrlen2)))
+    if (UDT::INVALID_SOCK == (client_data = UDT::accept(server_data, (sockaddr*)&clientaddr2, &addrlen2)))
     {
-        cout << "accept(serv_data): " << UDT::getlasterror().getErrorMessage() << endl;
+        cout << "accept(server_data): " << UDT::getlasterror().getErrorMessage() << endl;
         exit(1);
     }
-    // using CC method
-    CUDPBlast* cchandle = NULL;
-    int temp;
-    if (UDT::ERROR == UDT::getsockopt(serv_data, 0, UDT_CC, &cchandle, &temp))
-    {
-        cout << "getsockopt(serv_data): " << UDT::getlasterror().getErrorMessage() << endl;
-        exit(1);
-    }else
-        cout << "getsockopt(serv_data success)" << endl;
-    if (NULL != cchandle)
-    {
-        cout << "enter set rate" << endl;
-        cchandle->setRate(500);
-        cchandle->test();
-    }
-    int i = 0;
-    int fd;
-    int ssize = 0;
-    char send_buf[MSS];
-    struct stat sb;
-    fd = open("/home/tony/論文code/論文code/file.txt", O_RDONLY, S_IRWXU);
-    // get file info
-    if(fstat(fd, &sb) == -1)
-    {
-        printf("fstat error\n");
-        exit(1);
-    }
-    // map file to memory
-    file_addr = mmap(NULL, sb.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-    if(file_addr == MAP_FAILED)
-    {
-        printf("mmap error\n");
-        exit(1);
-    }
-    int transmit_size = 0;
-    transmit_size = sb.st_size;
-    ssize = 0;
+
+    //-------------------------------------------------------------------------------------------
+    // Data Receiving
+    int rsize = 0;
+    int j = 0; // used to set start time
+    int fd; // use to open file
+    int total_recv_size = 0; // record receiver data size
+    fd = open("file.txt", O_RDWR | O_CREAT | O_TRUNC | O_APPEND, S_IRWXU);
     while(1)
     {
-        // clear temporary buffer
-        memset(send_buf, '\0', MSS);
-        // record start time when receive first data packet
-        if(i == 0)
+        // reset recv_buf.data
+        memset(recv_buf, '\0',sizeof(recv_buf));
+        // 未收到資料時回傳 -1
+        if(UDT::ERROR == (rsize = UDT::recv(client_data, (char *)recv_buf, sizeof(recv_buf), 0))) 
         {
-            //start time
-            if((old_time = times(&time_start)) == -1)
+            cout << "recv:" << UDT::getlasterror().getErrorMessage() << endl;
+            cout << rsize << endl;
+        }
+        else
+        {
+            //cout << "rsize : " << rsize << endl;
+            // record start time when receive first data packet
+            if(j == 0)
             {
-                printf("time error\n");
+                // record start time
+                if((old_time = times(&time_start)) == -1)
+                {
+                    cout << "time error" << endl;
+                    exit(1);
+                }
+                // create thread to monitor socket(client_data)
+                //pthread_create(new pthread_t, NULL, monitor, &client_data);
+            }
+            
+            if(write(fd, recv_buf, rsize) == -1)
+            {
+                cout << "write error" << endl;
                 exit(1);
             }
-            pthread_create(new pthread_t, NULL, monitor, &recver2);
+            total_recv_size += rsize ;
         }
-        
-        //Resent:
-        if(ssize < sb.st_size)
+        // timeout 到期，未收到封包
+        if(rsize == -1)
         {
-            if(UDT::ERROR == (ss = UDT::send(recver2, (char *)file_addr + ssize, transmit_size, 0))) 
-            {
-                cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
-                exit(1);
-            }
-            else
-            {
-                //cout << "send size : " << ss << endl;
-                ssize += ss;
-                //cout << "ssize : " << ssize << endl;
-                transmit_size -= ss;
-                //if((sb.st_size - ssize) < MSS)
-                //    MSS = sb.st_size -ssize;
-            }
-        }
-        total_send_size = ssize;
-        if(ssize == sb.st_size)
+            // 接收完成, 關閉檔案
+            cout << "receiving finish & close file" << endl;
+            close(fd);
             break;
-        
-        i++;
+        }
+        j++;
+
     }
     // close file
     close(fd);
@@ -434,42 +428,55 @@ void *handle_client(void *arg)
 
     printf("\n[Result]:\n");
     cout << "Client Seq: " << seq_client_char << endl;
-    //executing time
-    ticks=sysconf(_SC_CLK_TCK);
-    double execute_time = (new_time - old_time)/ticks;
+
+    //executing time - 20 (receiver timeout 時間)
+    ticks = sysconf(_SC_CLK_TCK);
+    double execute_time = (new_time - old_time)/ticks -20;
     printf("Execute Time: %2.2f\n", execute_time);
-    cout << "Total Send Packets: " << total_send_packets << endl;
-    cout << "Total Send Size: " << total_send_size << endl;
+    cout << "Total Send Size: " << total_recv_size << endl;
     
-    double send_rate_bytes = total_send_size / execute_time;
-    cout << "send_rate_bytes " << send_rate_bytes << endl;
-    if(send_rate_bytes >= UNITS_G)
+    double receive_rate_bytes = total_recv_size / execute_time;
+    cout << "receive_rate_bytes " << receive_rate_bytes << endl;
+
+    if(receive_rate_bytes >= UNITS_G)
     {
-        send_rate_bytes /= UNITS_G;
-        printf("UDT Sending Rate: %2.2f (GBytes/s)\n", send_rate_bytes);
+        receive_rate_bytes /= UNITS_G;
+        printf("UDT Receiving Rate: %2.2f (GBytes/s)\n", receive_rate_bytes);
         //printf("UDT Sending Rate: %2.2f (GBytes/s)\n\n", send_rate_bytes / UNITS_BYTE_TO_BITS);
     }
-    else if(send_rate_bytes >= UNITS_M)
+    else if(receive_rate_bytes >= UNITS_M)
     {
-        send_rate_bytes /= UNITS_M;
-        printf("UDT Sending Rate: %2.2f (MBytes/s)\n", send_rate_bytes);
+        receive_rate_bytes /= UNITS_M;
+        printf("UDT Receiving Rate: %2.2f (MBytes/s)\n", receive_rate_bytes);
         //printf("UDT Sending Rate: %2.2f (MBytes/s)\n\n", send_rate_bytes / UNITS_BYTE_TO_BITS);
     }
-    else if(send_rate_bytes >= UNITS_K)
+    else if(receive_rate_bytes >= UNITS_K)
     {
-        send_rate_bytes /= UNITS_K;
-        printf("UDT Sending Rate: %2.2f (KBytes/s)\n", send_rate_bytes);
+        receive_rate_bytes /= UNITS_K;
+        printf("UDT Receiving Rate: %2.2f (KBytes/s)\n", receive_rate_bytes);
         //printf("UDT Sending Rate: %2.2f (KBytes/s)\n\n", send_rate_bytes / UNITS_BYTE_TO_BITS);
     }
     else
     {
-        printf("UDT Sending Rate: %2.2f (Bytes/s)\n", send_rate_bytes);
+        printf("UDT Receiving Rate: %2.2f (Bytes/s)\n", receive_rate_bytes);
         //printf("UDT Sending Rate: %2.2f (Bytes/s)\n\n", send_rate_bytes / UNITS_BYTE_TO_BITS);
     }
 
-    
+    char method[15];
+    fstream fout("test.csv", ios::out|ios::app);
+
+    memset(method, '\0', sizeof(method));
+    strcpy(method, "UDT");
+   
+     // record result
+    fout << endl << endl;
+    fout << "Method," << method << endl;
+    fout << "MSS," << MSS << endl;
+    fout << "執行時間," << execute_time << endl;
+    fout << endl << endl;
+    fout.close();
     // receive END_TRANS packet's ACK from client, then close all connection
-    char control_data3[sizeof(END_TRANS)]; 
+    /*char control_data3[sizeof(END_TRANS)]; 
     rs = 0;
     
     printf("wait END_TRANS(Client Seq: %s)\n", seq_client_char);
@@ -479,15 +486,15 @@ void *handle_client(void *arg)
         exit(1);
     } 
     printf("finish waiting END_TRANS(Client Seq: %s)\n", seq_client_char);
-    if((rs > 0) && (strcmp(control_data3,END_TRANS) == 0))
-    {
-        total_number_clients--;
-        cout << "number of clients: " << total_number_clients << endl;
-        printf("get END_TRANS(Client Seq: %s)\n", seq_client_char);
+    */
+    //if((rs > 0) && (strcmp(control_data3,END_TRANS) == 0))
+    //{
+    //    total_number_clients--;
+    //    cout << "number of clients: " << total_number_clients << endl;
+    //    printf("get END_TRANS(Client Seq: %s)\n", seq_client_char);
         
-        UDT::close(serv_data);
-        UDT::close(recver2);
-    }
+        UDT::close(server_data);
+    //}
 
     return NULL;
 }

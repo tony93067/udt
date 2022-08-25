@@ -73,6 +73,12 @@ float ttl_s = 0.0f; // second
 int execute_time_sec = DEFAULT_EXECUTE_TIME;
 int num_client = 0;
 
+// indicate congestion control method
+int mode = 0;
+
+// congestion control method
+char method[15];
+
 // used to get mmap return address
 void* file_addr;
 #ifndef WIN32
@@ -91,7 +97,7 @@ int main(int argc, char* argv[])
    }*/
    if ((1 != argc) && (((2 != argc) && (3 != argc) && (4 != argc) && (5 != argc) && (6 != argc)) || (0 == atoi(argv[1]))))
    {
-      cout << "usage: ./udtserver [server_port] [MSS] [num_client]" << endl;
+      cout << "usage: ./udtserver [server_port] [MSS] [num_client] [mode(1:UDT, 2:CTCP, 3:CUDPBlast)]" << endl;
       return 0;
    }
 
@@ -109,12 +115,14 @@ int main(int argc, char* argv[])
     
    string service_control(CONTROL_DEFAULT_PORT);
   
-    if(4 == argc)
+    if(5 == argc)
     {
         MSS = atoi(argv[2]);
+        mode = atoi(argv[4]);
         cout << "Setting Parameter :" << endl;
-        cout << "MSS : " << MSS << endl;
+        cout << "MSS : " << MSS  << " Mode : " << mode << endl;
         num_client = atoi(argv[3]);
+
         port_data_socket = new string[num_client];
         // create port
         int tmp_port = 5100;
@@ -125,12 +133,19 @@ int main(int argc, char* argv[])
             port_data_socket[j] = tmp_port_char;
             tmp_port++;
         }
+        memset(method, '\0', sizeof(method));
+        if(mode == 1)
+            strcpy(method, "UDT");
+        else if(mode == 2)
+            strcpy(method, "CTCP");
+        else
+            strcpy(method, "CUDPBlast");
 
 
-    // decide service_port
-    service_control = argv[1];
+        // decide service_port
+        service_control = argv[1];
 
-    cout << "port: " << argv[1] << ", MSS size: " << argv[2] << endl;
+        cout << "port: " << argv[1] << ", MSS size: " << argv[2] << endl;
    }
 
    if (0 != getaddrinfo(SERVER_IP, service_control.c_str(), &hints, &res))
@@ -228,7 +243,7 @@ void *handle_client(void *arg)
     // send seq number to client
     char seq_client_char[1000];
 
-    // convert int into string
+    // convert int into string, seq_client from 1
     sprintf(seq_client_char,"%d", seq_client); 
     cout << "Client Seq: " << seq_client_char << endl;
     if(UDT::ERROR == (ss = UDT::send(recver, seq_client_char, sizeof(seq_client_char), 0)))
@@ -240,7 +255,6 @@ void *handle_client(void *arg)
 
     // send port number to client 
     port_seq %= num_client;
-    //cout << "elements in port_data_socket: " << sizeof(port_data_socket) << endl;
     if(UDT::ERROR == (ss = UDT::send(recver, (char *)port_data_socket[port_seq].c_str(), sizeof(port_data_socket[port_seq].c_str()), 0)))
     {
         cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
@@ -280,7 +294,7 @@ void *handle_client(void *arg)
 
 
     // UDT Options
-    //UDT::setsockopt(server_data, 0, UDT_CC, new CCCFactory<CUDPBlast>, sizeof(CCCFactory<CUDPBlast>));
+    UDT::setsockopt(server_data, 0, UDT_CC, new CCCFactory<CUDPBlast>, sizeof(CCCFactory<CUDPBlast>));
     if(UDT::ERROR == UDT::setsockopt(server_data, 0, UDT_MSS, new int(MSS), sizeof(int)))
     {
         cout << "set UDT MSS error" << endl;
@@ -372,7 +386,7 @@ void *handle_client(void *arg)
     int j = 0; // used to set start time
     int fd; // use to open file
     int total_recv_size = 0; // record receiver data size
-    fd = open("file.txt", O_RDWR | O_CREAT | O_TRUNC | O_APPEND, S_IRWXU);
+    fd = open("file.txt", O_RDWR | O_CREAT | O_TRUNC, S_IRWXU);
     while(1)
     {
         // reset recv_buf.data
@@ -381,7 +395,7 @@ void *handle_client(void *arg)
         if(UDT::ERROR == (rsize = UDT::recv(client_data, (char *)recv_buf, sizeof(recv_buf), 0))) 
         {
             cout << "recv:" << UDT::getlasterror().getErrorMessage() << endl;
-            cout << rsize << endl;
+            //cout << rsize << endl;
         }
         else
         {
@@ -396,7 +410,7 @@ void *handle_client(void *arg)
                     exit(1);
                 }
                 // create thread to monitor socket(client_data)
-                //pthread_create(new pthread_t, NULL, monitor, &client_data);
+                pthread_create(new pthread_t, NULL, monitor, &client_data);
             }
             
             if(write(fd, recv_buf, rsize) == -1)
@@ -433,7 +447,7 @@ void *handle_client(void *arg)
     ticks = sysconf(_SC_CLK_TCK);
     double execute_time = (new_time - old_time)/ticks -20;
     printf("Execute Time: %2.2f\n", execute_time);
-    cout << "Total Send Size: " << total_recv_size << endl;
+    cout << "Total Receive Size: " << total_recv_size << endl;
     
     double receive_rate_bytes = total_recv_size / execute_time;
     cout << "receive_rate_bytes " << receive_rate_bytes << endl;
@@ -462,11 +476,7 @@ void *handle_client(void *arg)
         //printf("UDT Sending Rate: %2.2f (Bytes/s)\n\n", send_rate_bytes / UNITS_BYTE_TO_BITS);
     }
 
-    char method[15];
-    fstream fout("test.csv", ios::out|ios::app);
-
-    memset(method, '\0', sizeof(method));
-    strcpy(method, "UDT");
+    fstream fout("coding_test.csv", ios::out|ios::app);
    
      // record result
     fout << endl << endl;
@@ -492,8 +502,9 @@ void *handle_client(void *arg)
     //    total_number_clients--;
     //    cout << "number of clients: " << total_number_clients << endl;
     //    printf("get END_TRANS(Client Seq: %s)\n", seq_client_char);
-        
-        UDT::close(server_data);
+
+    // 接收完成, 關閉 client 連線
+    UDT::close(client_data);
     //}
 
     return NULL;
@@ -519,7 +530,7 @@ DWORD WINAPI monitor(LPVOID s)
     //monitor_fd = open("monitor.txt", O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
     //sprintf(str, "MSS : %d\nSendRate(Mb/s)\tRTT(ms)\tCWnd\tPktSndPeriod(us)\tRecvACK\tRecvNAK\n", MSS);
     fout << "MSS," << MSS << endl;
-    fout << "SendRate(Mb/s)," << "ReceiveRate(Mb/s)," << "RTT(ms)," << "CWnd," << "FlowWindow," << "PktSndPeriod(us)," << "RecvACK," << "RecvNAK," << "EstimatedBandwidth(Mb/s)" << endl;
+    fout << "SendRate(Mb/s)," << "ReceiveRate(Mb/s)," << "Recv Loss," <<"RTT(ms)," << "CWnd," << "FlowWindow," << "PktSndPeriod(us)," << "RecvACK," << "RecvNAK," << "EstimatedBandwidth(Mb/s)" << endl;
     //cout << "SendRate(Mb/s)\tRTT(ms)\tCWnd\tPktSndPeriod(us)\tRecvACK\tRecvNAK" << endl;
     while (true)
     {
@@ -535,7 +546,7 @@ DWORD WINAPI monitor(LPVOID s)
             break;
         }
         
-        fout << perf.mbpsSendRate << "," << perf.mbpsRecvRate << "," << perf.msRTT << "," << perf.pktCongestionWindow << ","
+        fout << perf.mbpsSendRate << "," << perf.mbpsRecvRate << "," << perf.pktRcvLoss << "," << perf.msRTT << "," << perf.pktCongestionWindow << ","
             << perf.pktFlowWindow << "," << perf.usPktSndPeriod << "," << perf.pktRecvACK << "," << perf.pktRecvNAK << "," << perf.mbpsBandwidth << endl;
         if(perf.mbpsSendRate == 0 && perf.pktRecvACK == 0 && perf.pktRecvNAK == 0)
         {

@@ -133,6 +133,7 @@ int main(int argc, char* argv[])
             port_data_socket[j] = tmp_port_char;
             tmp_port++;
         }
+
         memset(method, '\0', sizeof(method));
         if(mode == 1)
             strcpy(method, "UDT");
@@ -215,8 +216,8 @@ void *handle_client(void *arg)
     //int interval = 0;
 
     // use to get getsockopt return variable and value
-    int sndbuf = 0;
-    int oplen = sizeof(int);
+    //int sndbuf = 0;
+    //int oplen = sizeof(int);
     
     total_number_clients++;
     
@@ -294,7 +295,19 @@ void *handle_client(void *arg)
 
 
     // UDT Options
-    UDT::setsockopt(server_data, 0, UDT_CC, new CCCFactory<CUDPBlast>, sizeof(CCCFactory<CUDPBlast>));
+    if(mode == 1)
+    {
+        cout << "Using default Congestion Control Method UDT" << endl;
+
+    }else if(mode == 2)
+    {
+        UDT::setsockopt(server_data, 0, UDT_CC, new CCCFactory<CTCP>, sizeof(CCCFactory<CTCP>));
+        cout << "Setting Congestion Control Method CTCP" << endl;
+    }else if(mode == 3)
+    {
+        UDT::setsockopt(server_data, 0, UDT_CC, new CCCFactory<CUDPBlast>, sizeof(CCCFactory<CUDPBlast>));
+        cout << "Setting Congestion Control Method CUDPBlast" << endl;
+    }
     if(UDT::ERROR == UDT::setsockopt(server_data, 0, UDT_MSS, new int(MSS), sizeof(int)))
     {
         cout << "set UDT MSS error" << endl;
@@ -310,15 +323,16 @@ void *handle_client(void *arg)
     
 
 
-    // set receive timeout 20 second
-    if (UDT::ERROR == UDT::setsockopt(server_data, 0, UDT_RCVTIMEO, new int(20000), sizeof(int)))
+    // set receive timeout 5 second
+    /*
+    if (UDT::ERROR == UDT::setsockopt(server_data, 0, UDT_RCVTIMEO, new int(5000), sizeof(int)))
     {
         cout << "set RCV timeout error" << endl;
     }else
     {
         UDT::getsockopt(server_data, 0, UDT_RCVTIMEO, (char *)&sndbuf, &oplen);
         cout << "Set RCV timeout : "<< sndbuf << endl;
-    }
+    }*/
     
     /*if (UDT::ERROR == UDT::getsockopt(serv_data, 0, UDT_SNDBUF, (char*)&sndbuf, &oplen))
     {
@@ -379,7 +393,14 @@ void *handle_client(void *arg)
         cout << "accept(server_data): " << UDT::getlasterror().getErrorMessage() << endl;
         exit(1);
     }
-
+    // get the file size
+    memset(recv_buf, '\0',sizeof(recv_buf));
+    if(UDT::ERROR == UDT::recv(client_data, (char *)recv_buf, sizeof(recv_buf), 0))
+    {
+        cout << "recv:" << UDT::getlasterror().getErrorMessage() << endl;
+        //cout << rsize << endl;
+    }
+    int file_size = atoi(recv_buf);
     //-------------------------------------------------------------------------------------------
     // Data Receiving
     int rsize = 0;
@@ -418,14 +439,13 @@ void *handle_client(void *arg)
                 cout << "write error" << endl;
                 exit(1);
             }
-            total_recv_size += rsize ;
+            total_recv_size += rsize;
+            //cout << "total_recv_size " << total_recv_size << endl;
         }
-        // timeout 到期，未收到封包
-        if(rsize == -1)
+        if(total_recv_size == file_size)
         {
             // 接收完成, 關閉檔案
             cout << "receiving finish & close file" << endl;
-            close(fd);
             break;
         }
         j++;
@@ -443,9 +463,8 @@ void *handle_client(void *arg)
     printf("\n[Result]:\n");
     cout << "Client Seq: " << seq_client_char << endl;
 
-    //executing time - 20 (receiver timeout 時間)
     ticks = sysconf(_SC_CLK_TCK);
-    double execute_time = (new_time - old_time)/ticks -20;
+    double execute_time = (new_time - old_time)/ticks;
     printf("Execute Time: %2.2f\n", execute_time);
     cout << "Total Receive Size: " << total_recv_size << endl;
     
@@ -475,8 +494,13 @@ void *handle_client(void *arg)
         printf("UDT Receiving Rate: %2.2f (Bytes/s)\n", receive_rate_bytes);
         //printf("UDT Sending Rate: %2.2f (Bytes/s)\n\n", send_rate_bytes / UNITS_BYTE_TO_BITS);
     }
-
-    fstream fout("coding_test.csv", ios::out|ios::app);
+    fstream fout;
+    if(mode == 1)
+        fout.open("UDT_Recv_Result.csv", ios::out|ios::app);
+    else if(mode ==2)
+        fout.open("CTCP_Recv_Result.csv", ios::out|ios::app);
+    else if(mode == 3)
+        fout.open("CUDPBlast_Recv_Result.csv", ios::out|ios::app);
    
      // record result
     fout << endl << endl;
@@ -516,14 +540,16 @@ void* monitor(void* s)
 DWORD WINAPI monitor(LPVOID s)
 #endif
 {
-    char method[15];
     UDTSOCKET u = *(UDTSOCKET*)s;
+    fstream fout;
     int zero_times = 0;
     UDT::TRACEINFO perf;
-    fstream fout("test.csv", ios::out|ios::app);
-    
-    memset(method, '\0', sizeof(method));
-    strcpy(method, "CUDPBlast");
+    if(mode == 1)
+        fout.open("Receiver_UDT_Monitor.csv", ios::out|ios::app);
+    else if(mode == 2)
+        fout.open("Receiver_CTCP_Monitor.csv", ios::out|ios::app);
+    else if (mode == 3)
+        fout.open("Receiver_CUDPBlast_Monitor.csv", ios::out|ios::app);
     fout << endl << endl;
     fout << "Method," << method << endl;
     // record monitor data
@@ -545,10 +571,9 @@ DWORD WINAPI monitor(LPVOID s)
             cout << "perfmon: " << UDT::getlasterror().getErrorMessage() << endl;
             break;
         }
-        
         fout << perf.mbpsSendRate << "," << perf.mbpsRecvRate << "," << perf.pktRcvLoss << "," << perf.msRTT << "," << perf.pktCongestionWindow << ","
             << perf.pktFlowWindow << "," << perf.usPktSndPeriod << "," << perf.pktRecvACK << "," << perf.pktRecvNAK << "," << perf.mbpsBandwidth << endl;
-        if(perf.mbpsSendRate == 0 && perf.pktRecvACK == 0 && perf.pktRecvNAK == 0)
+        if(perf.mbpsRecvRate == 0)
         {
             zero_times++;
         }else

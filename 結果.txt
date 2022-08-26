@@ -1,5 +1,0 @@
-udt 
-1GB data 
-1500 byte packet size
-packet interval 1ms
-total time : 

@@ -887,7 +887,6 @@ void CUDT::connect(const sockaddr* peer, CHandShake* hs)
    }
 
    m_pCC = m_pCCFactory->create();
-   cout << "class create" << endl;
    m_pCC->m_UDT = m_SocketID;
    m_pCC->setMSS(m_iMSS);
    m_pCC->setMaxCWndSize((int&)m_iFlowWindowSize);

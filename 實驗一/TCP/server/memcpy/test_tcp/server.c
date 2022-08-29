@@ -24,6 +24,7 @@ int data_size = 0;
 struct tms time_start,time_end;
 clock_t old_time, new_time;
 double ticks;
+int Background_TCP_Number = 0;
 //int cd = 0;
 /******************/
 
@@ -45,7 +46,7 @@ void *send_packet(void *arg)
 
     // open file
     fd = open("file.txt", O_CREAT|O_RDWR|O_TRUNC, S_IRWXU);
-    ex = open("test.csv", O_CREAT|O_RDWR|O_TRUNC, S_IRWXU);
+    ex = open("TCP_Receiver.csv", O_CREAT|O_RDWR|O_APPEND, S_IRWXU);
     
     while(1)
     {
@@ -87,11 +88,19 @@ void *send_packet(void *arg)
     printf("Execute Time: %2.2f\n", execute_time);
     printf("total recvsize %lld \n", total_recvsize);
     /*************/
-    char str[100];
+    char str[100] = {0};
     sprintf(str, "%s\n", "TCP");
     write(ex, str, sizeof(str));
+    
+    memset(str, '\0', sizeof(str));
+    sprintf(str, "%s\t%d\n", "Background_TCP_Number", Background_TCP_Number);
+    write(ex, str, sizeof(str));
+    
+    memset(str, '\0', sizeof(str));
     sprintf(str, "%s\t%f\n", "Recv Time", execute_time);
     write(ex, str, sizeof(str));
+    
+    write(ex, "\n", sizeof("\n"));
     printf("Packet recv sucessfully!\n\n");	
     //fprintf(ex, "%s\n", "TCP");
     //fprintf(ex, "%s\t%f\n", "Recv Time", execute_time);
@@ -112,11 +121,11 @@ int main(int argc, char **argv)
 //   int i = 0,j = 0;
     pthread_t p1;
     int ret = 0;
+    Background_TCP_Number = atoi(argv[1]);
 
-
-    if(argc != 1)
+    if(argc != 2)
     {
-        printf("Usage: %s\n",argv[0]);
+        printf("Usage: %s %s\n",argv[0], "Background_TCP_Number");
         exit(1);
     }
 

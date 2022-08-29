@@ -96,8 +96,8 @@ int main(int argc, char **argv)
         {
             fprintf(stderr, "can't create thread:%s\n", strerror(ret));
             exit(1);
-        }
-        printf("client %d\n", i);
+        }else
+        	printf("client %d\n", i);
         i++;
     }
     //close connection

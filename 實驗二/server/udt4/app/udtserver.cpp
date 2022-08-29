@@ -81,6 +81,9 @@ char method[15];
 
 // used to get mmap return address
 void* file_addr;
+
+// Background TCP Number
+int background_TCP_number = 0;
 #ifndef WIN32
 void* monitor(void*);
 #else
@@ -95,9 +98,9 @@ int main(int argc, char* argv[])
       cout << "usage: ./udtserver [server_port] [execute_time(sec)] [num_client] [output_interval(sec)] [ttl(msec)]" << endl;
       return 0;
    }*/
-   if ((1 != argc) && (((2 != argc) && (3 != argc) && (4 != argc) && (5 != argc) && (6 != argc)) || (0 == atoi(argv[1]))))
+   if (argc != 6)
    {
-      cout << "usage: ./udtserver [server_port] [MSS] [num_client] [mode(1:UDT, 2:CTCP, 3:CUDPBlast)]" << endl;
+      cout << "usage: ./udtserver [server_port] [MSS] [num_client] [mode(1:UDT, 2:CTCP, 3:CUDPBlast)] [Background TCP Number]" << endl;
       return 0;
    }
 
@@ -115,18 +118,19 @@ int main(int argc, char* argv[])
     
    string service_control(CONTROL_DEFAULT_PORT);
   
-    if(5 == argc)
+    if(6 == argc)
     {
         MSS = atoi(argv[2]);
         mode = atoi(argv[4]);
         cout << "Setting Parameter :" << endl;
         cout << "MSS : " << MSS  << " Mode : " << mode << endl;
         num_client = atoi(argv[3]);
+        background_TCP_number = atoi(argv[5]);
 
         port_data_socket = new string[num_client];
         // create port
         int tmp_port = 5100;
-        char tmp_port_char[10];
+        char tmp_port_char[15] = {0};
         for(int j = 0; j < num_client; j++)
         {
             sprintf(tmp_port_char, "%d", tmp_port);
@@ -505,6 +509,7 @@ void *handle_client(void *arg)
      // record result
     fout << endl << endl;
     fout << "Method," << method << endl;
+    fout << "BK TCP Number," << background_TCP_number << endl;
     fout << "MSS," << MSS << endl;
     fout << "執行時間," << execute_time << endl;
     fout << endl << endl;
@@ -527,8 +532,6 @@ void *handle_client(void *arg)
     //    cout << "number of clients: " << total_number_clients << endl;
     //    printf("get END_TRANS(Client Seq: %s)\n", seq_client_char);
 
-    // 接收完成, 關閉 client 連線
-    UDT::close(client_data);
     //}
 
     return NULL;
@@ -552,6 +555,7 @@ DWORD WINAPI monitor(LPVOID s)
         fout.open("Receiver_CUDPBlast_Monitor.csv", ios::out|ios::app);
     fout << endl << endl;
     fout << "Method," << method << endl;
+    fout << "BK TCP Number," << background_TCP_number << endl;
     // record monitor data
     //monitor_fd = open("monitor.txt", O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
     //sprintf(str, "MSS : %d\nSendRate(Mb/s)\tRTT(ms)\tCWnd\tPktSndPeriod(us)\tRecvACK\tRecvNAK\n", MSS);

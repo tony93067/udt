@@ -23,22 +23,21 @@ int num_client = 1;
 //int cd = 0;
 /******************/
 
-void *send_packet(void *arg)
+void *recv_packet(void *arg)
 {
     int j = 0;
     // send function return value
     int cd = *((int *)arg);
+    printf("socket fd %d\n", cd);
     num_client++;
-    printf("Start Receiving Packet!\n");
     char* buffer = (char*)malloc(sizeof(char)*BUFFER_SIZE);
     //send packet
     while(1)
     {
         memset(buffer, '\0', BUFFER_SIZE);
-        memset(buffer, '1', BUFFER_SIZE);
         if(recv(cd, buffer, BUFFER_SIZE, 0) < 0)
         {
-            DIE("recv");
+            printf("%s\n", strerror(errno));
         }
     }
     //close connection
@@ -48,12 +47,12 @@ void *send_packet(void *arg)
 
 int main(int argc, char **argv)
 {
+    struct timeval timeout={0,0};//3s
     static struct sockaddr_in server;
     int sd, cd, i;
     int reuseaddr = 1;
     int client_len = sizeof(struct sockaddr_in);
     pthread_t p[100];
-    int ret = 0;
 
     if(argc != 1)
     {
@@ -63,6 +62,7 @@ int main(int argc, char **argv)
 
     //open socket
     sd = socket(AF_INET,SOCK_STREAM,0);
+    int ret=setsockopt(sd,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout));
     if(sd < 0)
     {
         DIE("socket");
@@ -83,7 +83,7 @@ int main(int argc, char **argv)
     }
 
     //listen
-    if(listen(sd,1) < 0)
+    if(listen(sd,15) < 0)
     {
         DIE("listen");
     }
@@ -92,13 +92,12 @@ int main(int argc, char **argv)
     while(1)
     {  
         cd = accept(sd,(struct sockaddr *)&server,&client_len);
-        if((ret = pthread_create(&p[i], NULL, send_packet, (void*)&cd)) != 0)
+        if((ret = pthread_create(&p[i++], NULL, recv_packet, (void*)&cd)) != 0)
         {
             fprintf(stderr, "can't create thread:%s\n", strerror(ret));
             exit(1);
         }else
         	printf("client %d\n", i);
-        i++;
     }
     //close connection
     close(sd);

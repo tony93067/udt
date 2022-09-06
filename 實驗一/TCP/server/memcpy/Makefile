@@ -1,4 +1,4 @@
-all: background_server_uplink background_server_downlink server
+all: background_client_downlink background_client_uplink
 
 % : %.c
 	gcc -o $@ $< -lnsl -lpthread 

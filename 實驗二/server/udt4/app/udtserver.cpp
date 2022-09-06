@@ -82,6 +82,10 @@ char method[15];
 // used to get mmap return address
 void* file_addr;
 
+//temp variable
+char* temp_MSS;
+char* temp_BK_TCP;
+
 // Background TCP Number
 int background_TCP_number = 0;
 #ifndef WIN32
@@ -120,6 +124,8 @@ int main(int argc, char* argv[])
   
     if(6 == argc)
     {
+        temp_MSS = argv[2];
+        temp_BK_TCP = argv[5];
         MSS = atoi(argv[2]);
         mode = atoi(argv[4]);
         cout << "Setting Parameter :" << endl;
@@ -463,7 +469,14 @@ void *handle_client(void *arg)
         printf("time error\n");
         exit(1);
     }
+    memset(recv_buf, '\0', sizeof(recv_buf));
+    strcpy(recv_buf, "END");
 
+    // let sender know receiver receving finish
+    if(UDT::ERROR == UDT::send(client_data, (char *)recv_buf, sizeof(recv_buf), 0))
+    {
+        cout << "recv:" << UDT::getlasterror().getErrorMessage() << endl;
+    }
     printf("\n[Result]:\n");
     cout << "Client Seq: " << seq_client_char << endl;
 
@@ -499,12 +512,37 @@ void *handle_client(void *arg)
         //printf("UDT Sending Rate: %2.2f (Bytes/s)\n\n", send_rate_bytes / UNITS_BYTE_TO_BITS);
     }
     fstream fout;
+    char result_addr[50] = {0};
     if(mode == 1)
-        fout.open("UDT_Recv_Result.csv", ios::out|ios::app);
+    {
+        strcat(result_addr, "UDT_Recv_Result_");
+        strcat(result_addr, "MSS");
+        strcat(result_addr, temp_MSS);
+        strcat(result_addr, "_TCP");
+        strcat(result_addr, temp_BK_TCP);
+        strcat(result_addr, ".csv");
+        fout.open(result_addr, ios::out|ios::app);
+    }
     else if(mode ==2)
-        fout.open("CTCP_Recv_Result.csv", ios::out|ios::app);
+    {
+        strcat(result_addr, "CTCP_Recv_Result_");
+        strcat(result_addr, "MSS");
+        strcat(result_addr, temp_MSS);
+        strcat(result_addr, "_TCP");
+        strcat(result_addr, temp_BK_TCP);
+        strcat(result_addr, ".csv");
+        fout.open(result_addr, ios::out|ios::app);
+    }
     else if(mode == 3)
-        fout.open("CUDPBlast_Recv_Result.csv", ios::out|ios::app);
+    {
+        strcat(result_addr, "CUDPBlast_Recv_Result_");
+        strcat(result_addr, "MSS");
+        strcat(result_addr, temp_MSS);
+        strcat(result_addr, "_TCP");
+        strcat(result_addr, temp_BK_TCP);
+        strcat(result_addr, ".csv");
+        fout.open(result_addr, ios::out|ios::app);
+    }
    
      // record result
     fout << endl << endl;
@@ -544,15 +582,40 @@ DWORD WINAPI monitor(LPVOID s)
 #endif
 {
     UDTSOCKET u = *(UDTSOCKET*)s;
+    char result_addr[50] = {0};
     fstream fout;
     int zero_times = 0;
     UDT::TRACEINFO perf;
     if(mode == 1)
-        fout.open("Receiver_UDT_Monitor.csv", ios::out|ios::app);
+    {
+        strcat(result_addr, "Receiver_UDT_Monitor_");
+        strcat(result_addr, "MSS");
+        strcat(result_addr, temp_MSS);
+        strcat(result_addr, "_TCP");
+        strcat(result_addr, temp_BK_TCP);
+        strcat(result_addr, ".csv");
+        fout.open(result_addr, ios::out|ios::app);
+    }
     else if(mode == 2)
-        fout.open("Receiver_CTCP_Monitor.csv", ios::out|ios::app);
+    {
+        strcat(result_addr, "Receiver_CTCP_Monitor_");
+        strcat(result_addr, "MSS");
+        strcat(result_addr, temp_MSS);
+        strcat(result_addr, "_TCP");
+        strcat(result_addr, temp_BK_TCP);
+        strcat(result_addr, ".csv");
+        fout.open(result_addr, ios::out|ios::app);
+    }
     else if (mode == 3)
-        fout.open("Receiver_CUDPBlast_Monitor.csv", ios::out|ios::app);
+    {
+        strcat(result_addr, "Receiver_CUDPBlast_Monitor_");
+        strcat(result_addr, "MSS");
+        strcat(result_addr, temp_MSS);
+        strcat(result_addr, "_TCP");
+        strcat(result_addr, temp_BK_TCP);
+        strcat(result_addr, ".csv");
+        fout.open(result_addr, ios::out|ios::app);
+    }
     fout << endl << endl;
     fout << "Method," << method << endl;
     fout << "BK TCP Number," << background_TCP_number << endl;

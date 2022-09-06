@@ -1,11 +1,12 @@
 #include <udt.h>
 #include <ccc.h>
-#include <stdio.h>
+
 class CTCP: public CCC
 {
 public:
    void init()
    {
+      printf("CTCP\n");
       m_bSlowStart = true;
       m_issthresh = 83333;
 
@@ -88,18 +89,14 @@ class CUDPBlast: public CCC
 public:
    CUDPBlast()
    {
-      m_dPktSndPeriod = 1000000; 
+      printf("CUDPBlast\n");
+      m_dPktSndPeriod = 0.0;
       m_dCWndSize = 83333.0; 
    }
 
 public:
    void setRate(double mbps)
    {
-      m_dPktSndPeriod = 0;
-      printf("pkt send period %f\n", m_dPktSndPeriod);
-   }
-   void test()
-   {
-      printf("test\n");
+      m_dPktSndPeriod = (m_iMSS * 8.0) / mbps;
    }
 };

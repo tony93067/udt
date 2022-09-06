@@ -6,7 +6,6 @@ class CTCP: public CCC
 public:
    void init()
    {
-      printf("CTCP\n");
       m_bSlowStart = true;
       m_issthresh = 83333;
 
@@ -89,9 +88,11 @@ class CUDPBlast: public CCC
 public:
    CUDPBlast()
    {
-      printf("CUDPBlast\n");
+      printf(" CUDPBlast\n");
+      // m_dPktSndPeriod = 1000000; 
       m_dPktSndPeriod = 0.0;
       m_dCWndSize = 83333.0; 
+      // m_dCWndSize = 2.0;
    }
 
 public:

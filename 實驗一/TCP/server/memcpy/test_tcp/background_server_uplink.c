@@ -12,7 +12,7 @@
 #include <pthread.h>
 #include <sys/times.h>
 #include <sys/mman.h>
-
+#include <arpa/inet.h>
 #define BUFFER_SIZE 10000
 #define DIE(x) perror(x),exit(1)
 
@@ -34,7 +34,7 @@ int main(int argc, char **argv)
 
     //open socket
     sd = socket(AF_INET,SOCK_STREAM,0);
-    int ret=setsockopt(sd,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout));
+    //int ret=setsockopt(sd,SOL_SOCKET,SO_RCVTIMEO,&timeout,sizeof(timeout));
     if(sd < 0)
     {
         DIE("socket");
@@ -43,7 +43,7 @@ int main(int argc, char **argv)
     /* Initialize address. */
     server.sin_family = AF_INET;
     server.sin_port = htons(port);
-    server.sin_addr.s_addr = htonl(INADDR_ANY);
+    server.sin_addr.s_addr = inet_addr("140.117.171.182");
 
     //reuse address
     setsockopt(sd,SOL_SOCKET,SO_REUSEADDR,&reuseaddr,sizeof(reuseaddr));
@@ -62,6 +62,7 @@ int main(int argc, char **argv)
    
     //num_packets = atoi(argv[1]);
     cd = accept(sd,(struct sockaddr *)&server,&client_len);
+    printf("connection accept\n");
     while(1)
     {
         memset(buffer, '\0', BUFFER_SIZE);

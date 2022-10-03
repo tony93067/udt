@@ -58,6 +58,8 @@ clock_t old_time, new_time;
 struct tms time_start,time_end;//use for count executing time
 double ticks;
 
+//temporary store system time
+char* sys_time;
 // number of clients
 int total_number_clients = 0;
 int seq_client = 1;
@@ -79,6 +81,8 @@ int mode = 0;
 // congestion control method
 char method[15];
 
+// indicate monitor time
+int monitor_time = 0;
 // used to get mmap return address
 void* file_addr;
 
@@ -96,7 +100,9 @@ DWORD WINAPI monitor(LPVOID);
 
 int main(int argc, char* argv[])
 {
-    
+    time_t now = time(0);
+    sys_time = ctime(&now);
+    cout << sys_time << endl;
    /*if ((1 != argc) && (((2 != argc) && (3 != argc) && (4 != argc) && (5 != argc) && (6 != argc)) || (0 == atoi(argv[1]))))
    {
       cout << "usage: ./udtserver [server_port] [execute_time(sec)] [num_client] [output_interval(sec)] [ttl(msec)]" << endl;
@@ -104,7 +110,7 @@ int main(int argc, char* argv[])
    }*/
    if (argc != 6)
    {
-      cout << "usage: ./udtserver [server_port] [MSS] [num_client] [mode(1:UDT, 2:CTCP, 3:CUDPBlast)] [Background TCP Number]" << endl;
+      cout << "usage: ./udtserver [server_port] [MSS] [num_client] [mode(1:UDT, 2:CTCP, 3:CBicTCP)] [Background TCP Number]" << endl;
       return 0;
    }
 
@@ -150,7 +156,7 @@ int main(int argc, char* argv[])
         else if(mode == 2)
             strcpy(method, "CTCP");
         else
-            strcpy(method, "CUDPBlast");
+            strcpy(method, "CBicTCP");
 
 
         // decide service_port
@@ -190,7 +196,7 @@ int main(int argc, char* argv[])
    int addrlen = sizeof(clientaddr);
 
    UDTSOCKET recver;
-
+   pthread_t p1;
    while (true)
    {
       if (UDT::INVALID_SOCK == (recver = UDT::accept(serv, (sockaddr*)&clientaddr, &addrlen)))
@@ -204,17 +210,17 @@ int main(int argc, char* argv[])
       getnameinfo((sockaddr *)&clientaddr, addrlen, clienthost, sizeof(clienthost), clientservice, sizeof(clientservice), NI_NUMERICHOST|NI_NUMERICSERV);
       cout << "\n\nnew connection: " << clienthost << ":" << clientservice << endl;
       // create thread to handle clients
-      pthread_t p1;
+      
       if(pthread_create(&p1, NULL, handle_client, new UDTSOCKET(recver)) != 0)
       {
         cout << "pthread_create error!!" << endl;
         exit(1);
       }
+       pthread_join(p1, NULL);
+       break;
    }
 
-   UDT::close(recver);
    UDT::close(serv);
-
    return 1;
 }
 
@@ -233,9 +239,7 @@ void *handle_client(void *arg)
     
     cout << "total_number_clients: " << total_number_clients << endl;
    
-    int rs;
-    char control_data[sizeof(START_TRANS)];
-
+    /*
     // receive control msg (SOCK_STREAM)
     if (UDT::ERROR == (rs = UDT::recv(recver, control_data, sizeof(control_data), 0)))
     {
@@ -279,7 +283,7 @@ void *handle_client(void *arg)
         service_data = port_data_socket[port_seq]; 
         port_seq++;
     }
-
+    */
 	//cout << "service_data " << service_data.c_str() << endl;
 	fflush(stdout);
     /* create data tranfer socket(using partial reliable message mode) */
@@ -293,7 +297,7 @@ void *handle_client(void *arg)
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
  
-    if (0 != getaddrinfo(SERVER_IP, service_data.c_str(), &hints, &res))
+    if (0 != getaddrinfo(SERVER_IP, "5100", &hints, &res))
     {
         cout << "illegal port number or port is busy.\n" << endl;
         exit(1);
@@ -315,8 +319,8 @@ void *handle_client(void *arg)
         cout << "Setting Congestion Control Method CTCP" << endl;
     }else if(mode == 3)
     {
-        UDT::setsockopt(server_data, 0, UDT_CC, new CCCFactory<CUDPBlast>, sizeof(CCCFactory<CUDPBlast>));
-        cout << "Setting Congestion Control Method CUDPBlast" << endl;
+        UDT::setsockopt(server_data, 0, UDT_CC, new CCCFactory<CBiCTCP>, sizeof(CCCFactory<CBiCTCP>));
+        cout << "Setting Congestion Control Method CBiCTCP" << endl;
     }
     if(UDT::ERROR == UDT::setsockopt(server_data, 0, UDT_MSS, new int(MSS), sizeof(int)))
     {
@@ -452,6 +456,8 @@ void *handle_client(void *arg)
             total_recv_size += rsize;
             //cout << "total_recv_size " << total_recv_size << endl;
         }
+        if(monitor_time == 600)
+            break;
         if(total_recv_size == file_size)
         {
             // 接收完成, 關閉檔案
@@ -475,10 +481,9 @@ void *handle_client(void *arg)
     // let sender know receiver receving finish
     if(UDT::ERROR == UDT::send(client_data, (char *)recv_buf, sizeof(recv_buf), 0))
     {
-        cout << "recv:" << UDT::getlasterror().getErrorMessage() << endl;
+        cout << "send:" << UDT::getlasterror().getErrorMessage() << endl;
     }
     printf("\n[Result]:\n");
-    cout << "Client Seq: " << seq_client_char << endl;
 
     ticks = sysconf(_SC_CLK_TCK);
     double execute_time = (new_time - old_time)/ticks;
@@ -535,7 +540,7 @@ void *handle_client(void *arg)
     }
     else if(mode == 3)
     {
-        strcat(result_addr, "CUDPBlast_Recv_Result_");
+        strcat(result_addr, "CBiCTCP_Recv_Result_");
         strcat(result_addr, "MSS");
         strcat(result_addr, temp_MSS);
         strcat(result_addr, "_TCP");
@@ -548,6 +553,7 @@ void *handle_client(void *arg)
     fout << endl << endl;
     fout << "Method," << method << endl;
     fout << "BK TCP Number," << background_TCP_number << endl;
+    fout << "程式執行時間," << sys_time << endl;
     fout << "MSS," << MSS << endl;
     fout << "執行時間," << execute_time << endl;
     fout << endl << endl;
@@ -571,7 +577,17 @@ void *handle_client(void *arg)
     //    printf("get END_TRANS(Client Seq: %s)\n", seq_client_char);
 
     //}
-
+    memset(recv_buf, '\0', sizeof(recv_buf));
+    if(UDT::ERROR == UDT::recv(client_data, (char *)recv_buf, sizeof(recv_buf), 0))
+    {
+        cout << "recv:" << UDT::getlasterror().getErrorMessage() << endl;
+    }else
+    	cout << "recv: " << recv_buf << endl;
+    while(1)
+    {
+    	if(strcmp(recv_buf, "END")==0)
+    		break;
+    }
     return NULL;
 }
 
@@ -608,7 +624,7 @@ DWORD WINAPI monitor(LPVOID s)
     }
     else if (mode == 3)
     {
-        strcat(result_addr, "Receiver_CUDPBlast_Monitor_");
+        strcat(result_addr, "Receiver_CBiCTCP_Monitor_");
         strcat(result_addr, "MSS");
         strcat(result_addr, temp_MSS);
         strcat(result_addr, "_TCP");
@@ -619,11 +635,12 @@ DWORD WINAPI monitor(LPVOID s)
     fout << endl << endl;
     fout << "Method," << method << endl;
     fout << "BK TCP Number," << background_TCP_number << endl;
+    fout << "程式執行時間," << sys_time << endl;
     // record monitor data
     //monitor_fd = open("monitor.txt", O_RDWR | O_CREAT | O_APPEND, S_IRWXU);
     //sprintf(str, "MSS : %d\nSendRate(Mb/s)\tRTT(ms)\tCWnd\tPktSndPeriod(us)\tRecvACK\tRecvNAK\n", MSS);
     fout << "MSS," << MSS << endl;
-    fout << "SendRate(Mb/s)," << "ReceiveRate(Mb/s)," << "Recv Loss," <<"RTT(ms)," << "CWnd," << "FlowWindow," << "PktSndPeriod(us)," << "RecvACK," << "RecvNAK," << "EstimatedBandwidth(Mb/s)" << endl;
+    fout << "SendRate(Mb/s)," << "ReceiveRate(Mb/s)," << "Send Loss," << "Recv Loss," <<"RTT(ms)," << "CWnd," << "FlowWindow," << "Retrans," << "PktSndPeriod(us)," << "SendACK," <<"SendNAK," <<"RecvACK," << "RecvNAK," << "EstimatedBandwidth(Mb/s)," << "Retrans_Total, " << "NAK_TotalSent," << "Total Send Loss," << "Total Recv Loss"<< endl;
     //cout << "SendRate(Mb/s)\tRTT(ms)\tCWnd\tPktSndPeriod(us)\tRecvACK\tRecvNAK" << endl;
     while (true)
     {
@@ -638,8 +655,11 @@ DWORD WINAPI monitor(LPVOID s)
             cout << "perfmon: " << UDT::getlasterror().getErrorMessage() << endl;
             break;
         }
-        fout << perf.mbpsSendRate << "," << perf.mbpsRecvRate << "," << perf.pktRcvLoss << "," << perf.msRTT << "," << perf.pktCongestionWindow << ","
-            << perf.pktFlowWindow << "," << perf.usPktSndPeriod << "," << perf.pktRecvACK << "," << perf.pktRecvNAK << "," << perf.mbpsBandwidth << endl;
+        fout << perf.mbpsSendRate << "," << perf.mbpsRecvRate << "," << perf.pktSndLossTotal << "," << perf.pktRcvLoss << "," << perf.msRTT << "," << perf.pktCongestionWindow << ","
+            << perf.pktFlowWindow << "," << perf.pktRetrans << "," << perf.usPktSndPeriod << "," << perf.pktSentACK << "," << perf.pktSentNAK << ","<< perf.pktRecvACK << "," << perf.pktRecvNAK << "," << perf.mbpsBandwidth << "," << perf.pktRetransTotal << "," << perf.pktSentNAKTotal << "," << perf.pktSndLossTotal << "," << perf.pktRcvLossTotal << endl;
+        monitor_time++;
+        if(monitor_time >= 600)
+            break;
         if(perf.mbpsRecvRate == 0)
         {
             zero_times++;

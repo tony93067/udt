@@ -12,12 +12,14 @@
 #include <pthread.h>
 #include <sys/times.h>
 #include <sys/mman.h>
+#include <arpa/inet.h>
 
 
 #define DIE(x) perror(x),exit(1)
-#define PORT 9000
+#define PORT 12000
 #define BUFFER_SIZE 10000
 
+char* sys_time;
 /***global value***/
 int num_client = 1;
 int data_size = 0;
@@ -93,6 +95,10 @@ void *send_packet(void *arg)
     write(ex, str, sizeof(str));
     
     memset(str, '\0', sizeof(str));
+    sprintf(str, "%s\t%s\n", "程式執行時間", sys_time);
+    write(ex, sys_time, strlen(sys_time));
+    
+    memset(str, '\0', sizeof(str));
     sprintf(str, "%s\t%d\n", "Background_TCP_Number", Background_TCP_Number);
     write(ex, str, sizeof(str));
     
@@ -112,6 +118,8 @@ void *send_packet(void *arg)
 
 int main(int argc, char **argv)
 {
+    time_t now = time(0);
+    sys_time = ctime(&now);
     static struct sockaddr_in server;
     int sd,cd; 
     int reuseaddr = 1;
@@ -139,7 +147,7 @@ int main(int argc, char **argv)
     /* Initialize address. */
     server.sin_family = AF_INET;
     server.sin_port = htons(PORT);
-    server.sin_addr.s_addr = htonl(INADDR_ANY);
+    server.sin_addr.s_addr = inet_addr("140.117.171.182");
 
     //reuse address
     setsockopt(sd,SOL_SOCKET,SO_REUSEADDR,&reuseaddr,sizeof(reuseaddr));
@@ -160,7 +168,7 @@ int main(int argc, char **argv)
     while(1)
     {
         cd = accept(sd,(struct sockaddr *)&server,&client_len);
-
+	printf("accept");
         if((ret = pthread_create(&p1, NULL, send_packet, (void*)&cd)) != 0)
         {
             fprintf(stderr, "can't create p1 thread:%s\n", strerror(ret));
